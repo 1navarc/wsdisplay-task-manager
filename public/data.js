@@ -1,0 +1,93 @@
+var conversations = [
+  {
+    "id": "9cc5308d-40fd-4ca0-856c-f733f083488f",
+    "from": "Gmail Team <mail-noreply@google.com>",
+    "name": "Gmail Team",
+    "subject": "Get the official Gmail app",
+    "body": "Get the official Gmail app\r\n[image: Gmail]\r\n\r\nGet the official Gmail app\r\nThe best features of Modco Mail are only available on your phone and tablet\r\nwith the official Gmail app. Download the app or go to gmail.com on your\r\ncomputer or mobile device to get started.\r\n\r\n[image: Get it on Google Play]\r\n<https://play.google.com/store/apps/details?id=com.google.android.gm&hl=en>\r\n[image:\r\nApple App Store]\r\n<https://apps.apple.com/app/gmail-email-by-google/id422689480?l=en>\r\n\r\nHappy emailing,\r\nThe Gmail Team\r\n[image: Google Cloud]\r\n\r\n© 2026 Google LLC 1600 Amphitheatre Parkway, Mountain View, CA 94043\r\n\r\n*You’re receiving this mandatory email service announcement to update you\r\nabout important changes to your Google Cloud product or account.*\r\n",
+    "status": "open",
+    "priority": "medium",
+    "mailbox": "info@modco.com",
+    "created": "2026-04-07T07:31:03.108Z",
+    "tags": [],
+    "assignee": "Craig"
+  },
+  {
+    "id": "d335750b-3356-42a4-b81b-b58100ca835c",
+    "from": "Gmail Team <mail-noreply@google.com>",
+    "name": "Gmail Team",
+    "subject": "Tips for using your new inbox",
+    "body": "Tips for using your new inbox\r\n[image: Gmail]\r\n\r\nWelcome to your inbox\r\n[image: Search]\r\nFind emails fast\r\nWith the power of Google Search in your inbox, you can archive\r\n<https://support.google.com/mail/answer/6576?hl=en&utm_source=gmailwelcomeemail&utm_medium=email&utm_campaign=gmailwelcome>\r\nall your email and find it\r\n<https://support.google.com/mail/answer/6593?hl=en&utm_source=gmailwelcomeemail&utm_medium=email&utm_campaign=gmailwelcome>\r\nlater in a flash. Your inbox stays tidy, and you never need to worry about\r\nwhat to keep.\r\n[image: Personalize]\r\nPersonalize Modco Mail\r\nCustomize inbox backgrounds, email signatures, and other options in Modco\r\nMail settings\r\n<https://support.google.com/mail/answer/6562?hl=en&utm_source=gmailwelcomeemail&utm_medium=email&utm_campaign=gmailwelcome>.\r\nReview and adjust your privacy and security settings at My Account\r\n<https://myaccount.google.com/>.\r\n[image: Organize]\r\nOrganize your email\r\nYou can organize email with labels\r\n<https://support.google.com/mail/answer/118708?hl=en&utm_source=gmailwelcomeemail&utm_medium=email&utm_campaign=gmailwelcome>,\r\nwhich are like folders, but you can add more than one label to a message.\r\nYou can also use filters\r\n<https://support.google.com/mail/answer/6579?hl=en&utm_source=gmailwelcomeemail&utm_medium=email&utm_campaign=gmailwelcome>\r\nto automatically sort and categorize messages as they come in.\r\n[image: Social]\r\nChat and meet directly from your inbox\r\nMessage with contacts in Google Chat\r\n<https://support.google.com/chat/answer/9341104?hl=en&utm_source=gmailwelcomeemail&utm_medium=email&utm_campaign=gmailwelcome>\r\nand start video meetings with up to 100 people in Google Meet\r\n<https://support.google.com/mail/answer/9822902?hl=en&utm_source=gmailwelcomeemail&utm_medium=email&utm_campaign=gmailwelcome>\r\nall without leaving Gmail.\r\n\r\nGet training and tips\r\nFind Gmail guides, tips, cheat sheets, help switching from Microsoft®\r\nOutlook®, and more at the Google Workspace Learning Center\r\n<https://support.google.com/a/users/answer/9259748?hl=en&utm_source=gmailwelcomeemail&utm_medium=email&utm_campaign=gmailwelcome>\r\n.\r\nVisit the Learning Center\r\n<https://support.google.com/a/users/answer/9259748?hl=en&utm_source=gmailwelcomeemail&utm_medium=email&utm_campaign=gmailwelcome>\r\n\r\nHappy emailing,\r\nThe Gmail Team\r\n[image: Google Cloud]\r\n\r\n© 2026 Google LLC 1600 Amphitheatre Parkway, Mountain View, CA 94043\r\n\r\n*You’re receiving this mandatory email service announcement to update you\r\nabout important changes to your Google Cloud product or account.*\r\n",
+    "status": "open",
+    "priority": "medium",
+    "mailbox": "info@modco.com",
+    "created": "2026-04-07T07:31:02.669Z",
+    "tags": [],
+    "assignee": "Craig"
+  },
+  {
+    "id": "b1e35b08-a06b-4ccf-bdc4-02ee56418c07",
+    "from": "F U T U R O <messenger@messaging.squareup.com>",
+    "name": "F U T U R O",
+    "subject": "Receipt from F U T U R O #Zmbf",
+    "body": "Reply to this email to leave feedback for F U T U R O\r\nYou paid $9.78 with your MasterCard ending in 0793 to F U T U R O on Mar 31 2026 at 10:43 AM.\r\n\r\nView your full receipt:\r\nhttps://squareup.com/r/arZmbfuJ45U95nhgHgaf5mPsyVKlOZY\r\n\r\nYour full receipt has more information about your payment to F U T U R O.\r\n\r\nhttps://squareup.com\r\n\r\n",
+    "status": "open",
+    "priority": "medium",
+    "mailbox": "info@modco.com",
+    "created": "2026-04-07T07:31:02.017Z",
+    "tags": [],
+    "assignee": "Craig"
+  },
+  {
+    "id": "ad702585-b7bf-4699-a5eb-519bdb7dc5cb",
+    "from": "The Google Workspace Team <workspace-noreply@google.com>",
+    "name": "The Google Workspace Team",
+    "subject": "Welcome to Google Workspace",
+    "body": "Google Workspace  \r\n<https://c.gle/ADMV5J_iVu6NDbHi5ws2V-300zbKr9ddDMPuOdYzvo1KTzWf4VvnoD_jqNSNPpm7BaetSp5m-D2PrgblWGtMIrDHw028Ook6qUJJqWg0AdTMAD7LOWLfg_hb0zmJtOplgo4VHKoBFEO2v9yyNCJqd8pQUvV494uz_a-ERMzOBPUo2SJ28wyiK9CJ385cW20>\r\n\r\nWelcome to Google Workspace. Let's get started.\r\n\r\nYou now have access to premium features, including Gemini for Docs, Slides,  \r\nand Sheets, eSignature tools for PDFs and Docs, and appointment booking  \r\npages.\r\n\r\nReview your recommendations  \r\n<https://c.gle/ADMV5J_0Aqq-pKMI4zRudyHyyPCyoQsSkSZXRNVW18UTLmddT04oFIQcrvKpnBlpZlRyfFi4kwIBJSNJ0yNTAt4MfiGvJBLMF9q9NnHfUjWXmwopLF_z401I2DpEm9iZvRLZF3qQQ7VkVBucO_ih6atk5Y7OB1-ZDdgdMbFEgaI5fVlas_8IIq1Rw4H9tuCkw0ylLtOAZeuu>\r\n\r\nA person is using Google Workspace tools to do work on their laptop.  \r\n<https://c.gle/ADMV5J_KpzcZg90657I8rFvcY2s33UiKxn5WN7A_BH8BX8SixY6ss1_VqM1an8EpuZ5GKIqFXtY_Iewb6bwL5qkQGriOwRLW6t6YDB54G7GkcZoAP3Nz37infF2opuQDvN9A7Q>\r\n\r\nDo your best work\r\n\r\nBuild your own ideas faster, or work with others, in Google Docs, Sheets,  \r\nand Slides with built-in templates and formatting tools. Share feedback in  \r\nreal time with online document editing and easy-to-use collaboration  \r\nfunctions.\r\n\r\nCreate your first document  \r\n<https://c.gle/ADMV5J__G7x_8mAEKoKyAjz_IVriXXpRDC_5E6wjSW7AotnuAjDq1QL1Ulmh6eD2rGVZH9UFZoeZM31Nu1u7q9Y_CbsQPDv5X3Vla9ToCDpIA3jhhl6OJLSXFwt3R-XhM30iLo4_-48S9oz1eOdis-3zKvSQ3Q>\r\n\r\nImage of Gemini in the Gmail side panel with suggested prompts including  \r\nsummarize this email, suggest a reply, and list action items.  \r\n<https://c.gle/ADMV5J_jyepaoxtL-evZD8Iia8k7rWuw7PWN183dsqZlUgiLnFJ-cJfWfM-T7QXl_nXTPrq0CjdbEEC28U7OiKDemaheKkQgzASqOzymmrcPRQpeQ27D4DFYSStBp0pSkMghpK9a000R4WVbls2-G6GLmJXzQW7s>\r\n\r\nWorkspace has AI with Gemini built in\r\n\r\nGemini can help you write, search, summarize, and more all built right into  \r\nyour Google Workspace account. Use Gemini across Gmail, Docs, Sheets,  \r\nSlides, and Drive on your computer and on your phone with the official apps.\r\n\r\nUse Gemini in the side panel  \r\n<https://c.gle/ADMV5J_7-7UV85mSFU00yCzl4LKckZwAVDOw7uKqRM8tiKtjCxzwpTOdVf72fsnSRK9W_fkfapUrGH-udNdCABd_wASOPoNOjRvNML7kDs3P8DxuoPb1r_vkhRM70QYD-UjN8_ECQETwaHTZm8bprtkr0ITdZYw4QCKFaelAhYbg4tWW5z-8z-6f>\r\n\r\nThree smiling people in different locations are video conferencing together  \r\nwith Google Meet.  \r\n<https://c.gle/ADMV5J9C9x5UL0oBG6z_iJFwgpXXRwZywoDuYmQtlJ3o3cLXV0Teamq7RIg8-qbTW6DVVhHk5vu1MKe64ZBuG5ThwZpbSqtZCqIa-o7IAJtvnE3HSY3FYgcrSzIU>\r\n\r\nShow up like a pro\r\n\r\nCreate or join secure, high-quality video meetings and calls on a variety  \r\nof devices using Google Meet with custom backgrounds. Your subscription  \r\nalso includes Gemini in Google Meet so you can automatically capture notes,  \r\nsee real-time translated captions, and share recaps.\r\n\r\nSchedule your next meeting  \r\n<https://c.gle/ADMV5J_OCZZC4raoZqeLuVJ4VIyijJcphlues1nAzGZnw99WEhDKJRGt72pYYz2QdCQ_ovVfVc3_EWT9-RTGe26xACfb_xP5ZNytb7wO-j6F3cYNW3NdPafo8RM8FGFukCakU8b3awu8GYL1L0Ga>\r\n\r\nA screenshot of the Gemini app  \r\n<https://c.gle/ADMV5J8vAwXQUh0sj_zYhKDvKkN1Wa_lerpTPxkFYb_ympRf-37nhv-MsF5uA-5-dhduFqi9ZvCemWJDiSMM7dK-xc3DbTG7TEd7resY42QngOVerQ_0e0F4n6OePzbd>\r\n\r\nDo more, in less time, with AI\r\n\r\nGemini is your AI-powered productivity partner, built right into Google  \r\nWorkspace. Tackle complex tasks like data analysis and deep research–all  \r\nwith enterprise-grade data protections.\r\n\r\nChat with Gemini  \r\n<https://c.gle/ADMV5J_If4cPeXbYuK_VQwrltjueIikzK3PPuZxdJUscmyCH62Eyfg_rjp-7y6hAJFC0Usgsm4iis2bhfvWEa5L-MGyCy6Xda66CHcDsDHGqPH4s92fwbqoQehi-36ZuEpd3gyrmwaN8>\r\n\r\nGoogle LLC 1600 Amphitheatre Parkway, Mountain View, CA 94043\r\n\r\nYou have received this email because it communicates important updates to  \r\nyour Google Workspace product or account.\r\n",
+    "status": "open",
+    "priority": "medium",
+    "mailbox": "info@modco.com",
+    "created": "2026-04-07T07:31:00.488Z",
+    "tags": [],
+    "assignee": "Craig"
+  },
+  {
+    "id": "2e09af0c-eaf6-4932-a753-51e817158f7f",
+    "from": "The Google Workspace Team <workspace-noreply@google.com>",
+    "name": "The Google Workspace Team",
+    "subject": "Create booking pages to connect with your customers",
+    "body": "Google  \r\nWorkspace<https://c.gle/ADMV5J-jv9487ePLfmw99q3cGhi1Szom1a1JURAmNJh_cAZL_L3VzKH4aOs2nM1xMbj6Z6afrNpV-IchNWsq1PijqVu6geig-7DjCPXWEjSJVhDYFW--QunvYb7-ZuGScbEpe0OZNgORE9rorb3Btry_4pgd>\r\n\r\nSimplify how customers book appointments with you\r\n\r\nEasily set up a professional booking page that displays your availability,  \r\nand let customers schedule appointments directly with you in Google  \r\nCalendar.\r\n\r\nSet up your booking  \r\npage<https://c.gle/ADMV5J9V7f3EAsGAVEywoXB2aeEmlolphX0i7nnOKZHhYEssOZpathQUBTe-wDjBGr71O4CMkp5hZCFbrA3OTPd201f5pKhBgRcpGEOrx5Crbtw04tMEv8yTUxNnpTwRX5QfdePbaNZC6VyBr6nxkbUBOwniUNGngfvKOPO67EiK7ddi7vYDYFnEpzo>\r\n\r\nGoogle Workspace features appear beside a person working at a  \r\ncomputer.<https://c.gle/ADMV5J_XUKyNAhDf5AlKmUPhI5a2ds2cRZMMdIwNYB1ZscT1BMtaW83XaX-xkwh4X7La9qRixTaLB5sw6OsnYDkOa99-SgF6T9UGQRKUvUSXI17_4zNpqpnlzkPzUV-DEkCzBxu1BBihDWr43OzZI4w1Jw038t0_N5fKhF4O-NI>\r\n\r\nCalendar Icon\r\n\r\nAppointment scheduling can help you:\r\n\r\nManage appointment bookings right from Calendar – no third-party tools  \r\nneeded\r\n\r\nMake a positive impression on your customers with a professional,  \r\neasy-to-use booking page. With your Google Workspace plan, you can set up  \r\none booking page and accept unlimited appointments.\r\n\r\nSchedule time without back-and-forth emails\r\n\r\nSimply create a booking page, set your availability, and share the link  \r\nwith your customers. Appointments will automatically sync with all your  \r\ncalendars and update in real-time to prevent double-bookings.\r\n\r\nCollect payment at booking and reduce no-shows\r\n\r\nSave time and centralize the booking experience for you and your customers.  \r\nConnect a Stripe account to collect payment at time of booking and send  \r\nautomated email reminders to reduce no-shows.\r\n\r\nSet up professional booking pages with just a few clicks in Google  \r\nCalendar, then share the link or embed it directly into your own website to  \r\neasily connect with new and existing customers.\r\n\r\nSet up your booking  \r\npage<https://c.gle/ADMV5J9LoQ1pB3-gpFr-3Ny9HdsTU4_WN8Y7v70rGvbMzjPvYWtGW8BDQLHiq3EVMMzco_YNpw7ZwtKrVMiA_3IBsyDaW9llOZ2pMxDMsyhYjWnvYeH3zI0EaSrvT4CsP9ysmDJb7m8vvgDp1hY7q-JdZB_rluJ52ZpqVoE4rwZrH793JKXe3vBPtqQ>\r\n\r\nGoogle Workspace icon  \r\ncluster<https://c.gle/ADMV5J8vLQTGpj0Q25Swfyf8jiun2gLGlK9wy8oCL8Yk9KLkRbBoE48uUuRzRcv-0PyBbzC3S0EWDeGwHGT0ZJSf30HE8ral7RN4FVbJD5zdluKrCiwDtrp5-DW8K_bkEIVxutIyAy0>\r\n\r\n© 2026 Google LLC 1600 Amphitheatre Parkway, Mountain View, CA 94043\r\n\r\nThis email was sent to info@modco.com because you or your administrator  \r\nsigned you up to receive news, product updates, and tips about Google  \r\nWorkspace. Please note that some features highlighted in these emails might  \r\nnot be deployed by your organization. If you don’t want to receive such  \r\nemails in the future, please unsubscribe  \r\nhere<https://myaccount.google.com/communication-preferences/unsubscribe/gt/ADMV5J_mfWOD2M4qk--gs64ZU5DWQqSdCQU69jxeRHgdAkD-nvn331CVRZHqMmx342_F37VRTNJQvucIsxmaqDi9WoppFGy3EwF7QVRh7gAK6GJeJNuFKq1FqsSQ2ii4bTiMgz-SblWKOjunF9xAKEY8d5Vf3JzQTkFtT_uX4gC5fcC3mKolp9FXpg8shhC_Wt7ds9jW9wQMpzcWw0wPVyvDRnAmTKLlwuIhS2ncPTZq33hr4ME58yn-3lM3DMSgAAhozeyJtcSweeS4?utm_source=gm&utm_medium=email&auto=true>.\r\n",
+    "status": "open",
+    "priority": "medium",
+    "mailbox": "info@modco.com",
+    "created": "2026-04-07T07:30:58.901Z",
+    "tags": [],
+    "assignee": "Craig"
+  },
+  {
+    "id": "1ec34003-9e10-42d7-8db7-776366d35e7a",
+    "from": "Craig VanVelzer <craig@wsdisplay.com>",
+    "name": "Craig VanVelzer",
+    "subject": "test -",
+    "body": "test\r\n This is a test message\r\n-- \r\n\r\n\r\n\r\n*Craig VanVelzer*\r\nwww.wsdisplay.com\r\n",
+    "status": "open",
+    "priority": "medium",
+    "mailbox": "info@modco.com",
+    "created": "2026-04-07T07:30:57.917Z",
+    "tags": [],
+    "assignee": "Craig"
+  },
+  {
+    "id": "4b45369d-a6e1-48ea-ad99-3a6aae44f8d0",
+    "from": "The Google Workspace Team <workspace-noreply@google.com>",
+    "name": "The Google Workspace Team",
+    "subject": "Write better emails with Gemini in Gmail",
+    "body": "Google  \r\nWorkspace<https://c.gle/ADMV5J9USGemHoyoS7C07zr7ep_BFtwLsQ1LoUCoTLYun4jxYO1lILUNzrHzhIYYhAajTosi48nRUsJp-fCmAE6sjwB7LOditAKRvWy5IHLWE04cgzQhd6I7ZbZARk40nBAfMLjyHl11GQ-844JbybRKBi4b>\r\n\r\nWrite emails more confidently and quickly with help from AI\r\n\r\nUse Gemini in Gmail to send your customers articulate and relevant emails,  \r\naccelerated by AI.\r\n\r\nTry Gemini in Gmail  \r\nnow<https://c.gle/ADMV5J9kBudx4hPggbBiR4xt25kL8GM1Ewbku35zx7iZe1dlHPNXettbxNv9uhGZ_1rM9UsPt-7NJeVGduWJBELBC3xKrh6glfqxbArWkjszkEeB8Liqo4F4h4jP6TqP8JX5a_dlqCR_VvXNTpDnuNpgIEvtwQQhE15wM1TPprDyS5uYJYYuQw>\r\n\r\nGoogle Workspace features appear beside a person working with a  \r\ntablet.<https://c.gle/ADMV5J87jEo6TuEv2G17HKwkOoSpbhnE7zf9PV5OXPVqF7bprKsTsEBilR71lIN9U7i4O99l4wmC-01Lt5r1SJ9MP0GtUxoangnKrxYpUPxydQkCSzJRI-FAckTYi_RrXpUhY7ydkUeSysgkpdbc89j8bZ21u1ifWbDHK9A>\r\n\r\nGmail  \r\nicon<https://c.gle/ADMV5J-FH3xT2FfOjBKbnDCcGRJ-sr8WugatqHOAsaHdjgG0YgX_OhoYu4GDy8XHq303T_ElC3lYUbJs8CDsrIl0HANMnv-GeTEofsNOOEp7iFWerrrq4mgbVozXlV4OGXf5Mm3y2-HYPMk8jROI07K91ZnWvWiYIpc>\r\n\r\nGemini in Gmail can help you:\r\n\r\nThe Help me write feature is displayed in a new email  \r\nmessage.<https://c.gle/ADMV5J-wJWw_lQZ3Gj6sQyyh3rhfLU5CzITurcoKTr1mvxKfm5ZPvi3xxat1irem3jgEj23Fuk_f0TzkK1GLBHGVWEeb5SO17WdhjvADWGZ4HsvPek_E-I6kcPClV3DFN0e7NyL_h_nZD9i5xLA264yW0UH31Vvpibq2YgVm>\r\n\r\nCompose, refine, and respond to emails faster\r\n\r\nQuickly draft emails and replies, turn outlines into elaborate drafts, and  \r\nrefine or formalize your emails with AI. Spend less time in your inbox and  \r\nmore time building customer relationships and focusing on core business  \r\nactivities.\r\n\r\nA suggested reply appears over an email  \r\nmessage.<https://c.gle/ADMV5J-O2S6EFFDf3IMpyPHihtbBsQOYgnREeiEsVeB7QXNUBnHkwaV9yCIkOxyHmSaz7KxRZYUlnPw56DN9-IN3gnrQhDSXXIJdqYX7YvgAJAeT3B_MQbKsFPraiDBPmHQUuIbge3U3wxguD6Oi5Ewb-wVprNFX3c6YjI21>\r\n\r\nImprove email efficiency with suggested replies\r\n\r\nGemini can suggest email responses instantly, and even take into account  \r\nthe context of the original email. Personalize and send to quickly address  \r\nyour customers’ needs.\r\n\r\nThe Gemini side panel is displayed in  \r\nGmail.<https://c.gle/ADMV5J-2ey6JJ2Zm9U4OGu2MQTp-9clxFFHAZnNWFEDZjPBzCJG7PoXSK24zhnVAhIPi5Hy2mhAeBKzatZfT5cIdCJ30si7zmgiM-_86WOuL9JtX3jNIjsSmUkbCM1gwLhwKousS10IelF_1i4RcHZ2ScQRGzQcyLtzhyiI>\r\n\r\nStay on top of your customers’ needs\r\n\r\nUse the Gemini side panel to save time by instantly finding the answers you  \r\nneed from your inbox, summarizing long threads, leveraging context from  \r\nyour files in Drive, and even managing your calendar directly from Gmail.\r\n\r\nGet started today – in a new email or a reply, just click the pencil with  \r\nthe star to activate “Help me write,” or open the side panel by tapping the  \r\nspark icon at the top-right corner of Gmail.\r\n\r\nAvailable on desktop and mobile (download the app on  \r\nAndroid<https://c.gle/ADMV5J_b-xDiR27qadLGGRzzqQVfoxvipp_Gb3urqFXuIannp4eQC6MwviJnyOkwolWVtXCtQ9FQcgk2HZlL_dEz5JEcRSaAm4DUiSrVek_oPQ0o0hxKxWx15Ui2hfLFucqqxCzxFdAx4NhXS9W1_ed8zMIjTbZ-6Q7CK-ZPY3YHDpSdK5ZdKCMnTw>  \r\nand  \r\niOS<https://c.gle/ADMV5J949kX3Xz4Yk_hAsBcSgUk0HACzwG9qqiM3y_g3xR1CsXgiSJCDyOu7oWrPgANrL-OfJyCjnes9SHJSscOwEmEn-aPmOUp2sfVfzZHAaXj7NUWsgX5svNZiTtj2-7cyrbWNNxOOguAHDfl0wXFgoOT9_lH1R92_0Ue0Hr17r0A>)\r\n\r\nTry Gemini in Gmail  \r\nnow<https://c.gle/ADMV5J8GlIK67_xSjHjr1DgGehiH79evg4jFzm3lkhag2rt1AH6WW2rfeP6y5XkHkjwh3fVzeYPIxR9MWLpp30pKYHvIWt0lrRsXR1iplSYJQlefcdqq5xaYaUMrbsp1KB5BY_UWGWQasQb7MT1_sEZFmn3sVFCQNbBSD0eAX-5xjkV1IpddYQ>\r\n\r\nGoogle Workspace icon  \r\ncluster<https://c.gle/ADMV5J_HAp7lCNbST3E0LjOJj-Xcw9PvM8xHJ_agRjVcaISNol07JLPenzr9VUoCy7JDr6IJaUtH0OJqn_5ygaxaKse2ykhUnN4yGxqiJ3fuxCXVG5N-nYEc43L9Xk4gG9w554ZfhiU>\r\n\r\n© 2026 Google LLC 1600 Amphitheatre Parkway, Mountain View, CA 94043\r\n\r\nThis email was sent to info@modco.com because you or your administrator  \r\nsigned you up to receive news, product updates, and tips about Google  \r\nWorkspace. Please note that some features highlighted in these emails might  \r\nnot be deployed by your organization. If you don’t want to receive such  \r\nemails in the future, please unsubscribe  \r\nhere<https://myaccount.google.com/communication-preferences/unsubscribe/gt/ADMV5J8BxmPyixFYCs7NW47cRmXG23F-RwIjIHD849OaoueK1LHxFKjhrsgkVbxDl-kt0sPzlwyBzqRTDTsHj7xJrECmZp6M8l2G9dBi3xEjH-aimeMADHgyOP-in1ZcL9HrtyeAz35BFXnlIeDcMEnmRAI8nrtGi-N1aXqElLLeckipepUwM9Dix1FptgSwmm4OP0ISu449DvOCBWpU2Iw8KJ2HZdizEMPMfVYRmwH9AFiCbpdFUvhCZl7Wuu2iFOkQOQ0nZ3KxwNeG?utm_source=gm&utm_medium=email&auto=true>.\r\n",
+    "status": "open",
+    "priority": "medium",
+    "mailbox": "info@modco.com",
+    "created": "2026-04-07T07:30:57.413Z",
+    "tags": [],
+    "assignee": "Craig"
+  }
+];
