@@ -122,7 +122,8 @@
     let sprites = {
         idle: null,
         run: [],         // array of canvases
-        jump: null
+        jump: null,
+        falling: null
     };
 
     // ─── GAME STATE ───
@@ -131,17 +132,18 @@
     async function init() {
         const loadingEl = document.getElementById('loading');
         try {
-            const [idle, run1, run2, run3, jump] = await Promise.all([
+            const [idle, run1, run2, jump, falling] = await Promise.all([
                 loadSprite('assets/sprites/idle.png'),
                 loadSprite('assets/sprites/run1.png'),
                 loadSprite('assets/sprites/run2.png'),
-                loadSprite('assets/sprites/run3.png'),
-                loadSprite('assets/sprites/jump.png')
+                loadSprite('assets/sprites/jump.png'),
+                loadSprite('assets/sprites/falling.png')
             ]);
 
             sprites.idle = idle;
-            sprites.run = [run1, run2, run3];
+            sprites.run = [run1, run2];
             sprites.jump = jump;
+            sprites.falling = falling;
 
             // Calculate render width based on idle sprite aspect ratio
             const aspect = idle.width / idle.height;
@@ -156,10 +158,10 @@
                 'Could not load sprites.<br><br>' +
                 'Please save your 5 images to:<br>' +
                 '<b>assets/sprites/idle.png</b> (standing pose)<br>' +
-                '<b>assets/sprites/run1.png</b> (right leg forward)<br>' +
-                '<b>assets/sprites/run2.png</b> (left leg forward)<br>' +
-                '<b>assets/sprites/run3.png</b> (mid-stride / action)<br>' +
-                '<b>assets/sprites/jump.png</b> (jumping pose)<br>';
+                '<b>assets/sprites/run1.png</b> (running frame 1)<br>' +
+                '<b>assets/sprites/run2.png</b> (running frame 2)<br>' +
+                '<b>assets/sprites/jump.png</b> (jumping pose)<br>' +
+                '<b>assets/sprites/falling.png</b> (falling pose)<br>';
             console.error(err);
         }
     }
@@ -212,8 +214,10 @@
         if (player.x + player.w < 0) player.x = CANVAS_W;
 
         // Animation state
-        if (!player.onGround) {
+        if (!player.onGround && player.vy < 0) {
             player.state = 'jump';
+        } else if (!player.onGround && player.vy >= 0) {
+            player.state = 'falling';
         } else if (Math.abs(player.vx) > 0.5) {
             player.state = 'run';
         } else {
@@ -253,7 +257,9 @@
 
         // Pick current sprite
         let sprite;
-        if (player.state === 'jump') {
+        if (player.state === 'falling') {
+            sprite = sprites.falling;
+        } else if (player.state === 'jump') {
             sprite = sprites.jump;
         } else if (player.state === 'run') {
             sprite = sprites.run[player.frame];
