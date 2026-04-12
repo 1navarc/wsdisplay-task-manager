@@ -92,6 +92,57 @@
         });
     }
 
+    // ─── SOUND EFFECTS (Web Audio API) ───
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playJumpSound() {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+        osc.start(audioCtx.currentTime);
+        osc.stop(audioCtx.currentTime + 0.2);
+    }
+
+    function playLandSound() {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(60, audioCtx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+        osc.start(audioCtx.currentTime);
+        osc.stop(audioCtx.currentTime + 0.15);
+    }
+
+    function playFootstep() {
+        const bufferSize = audioCtx.sampleRate * 0.05;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 3);
+        }
+        const source = audioCtx.createBufferSource();
+        source.buffer = buffer;
+        const gain = audioCtx.createGain();
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 800;
+        source.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        source.start(audioCtx.currentTime);
+    }
+
     // ─── INPUT ───
     const keys = {};
     window.addEventListener('keydown', e => {
@@ -195,6 +246,7 @@
         if ((keys['Space'] || keys['ArrowUp'] || keys['KeyW']) && player.onGround) {
             player.vy = JUMP_FORCE;
             player.onGround = false;
+            playJumpSound();
         }
 
         // Gravity
@@ -203,10 +255,12 @@
         player.x += player.vx;
 
         // Ground collision
+        const wasInAir = !player.onGround;
         if (player.y >= GROUND_Y - player.h) {
             player.y = GROUND_Y - player.h;
             player.vy = 0;
             player.onGround = true;
+            if (wasInAir) playLandSound();
         }
 
         // Wrap around screen edges
@@ -230,6 +284,7 @@
             if (player.animTimer >= ANIM_SPEED) {
                 player.animTimer = 0;
                 player.frame = (player.frame + 1) % sprites.run.length;
+                playFootstep();
             }
         } else {
             player.frame = 0;
