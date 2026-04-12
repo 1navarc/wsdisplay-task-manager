@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixar Runner</title>
+    <style>
+        * { margin: 0; padding: 0; }
+        body {
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            image-rendering: auto;
+        }
+        #loading {
+            position: absolute;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+            text-align: center;
+        }
+        #loading.hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading sprites...</div>
+    <canvas id="game"></canvas>
+
+    <script>
+    // ─── CONFIG ───
+    const CANVAS_W = 960;
+    const CANVAS_H = 540;
+    const GROUND_Y = CANVAS_H - 60;       // ground line
+    const GRAVITY = 0.6;
+    const JUMP_FORCE = -13;
+    const MOVE_SPEED = 5;
+    const FRICTION = 0.85;
+    const CHAR_RENDER_H = 150;             // larger than Mario
+    const ANIM_SPEED = 8;                  // frames per sprite swap
+
+    // Pink chroma-key tolerance (for removing the pink background)
+    const PINK_TOLERANCE = 80;
+
+    // ─── CANVAS SETUP ───
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    canvas.width = CANVAS_W;
+    canvas.height = CANVAS_H;
+
+    // ─── SPRITE LOADING WITH PINK REMOVAL ───
+    function removePinkBackground(img) {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const cx = c.getContext('2d');
+        cx.drawImage(img, 0, 0);
+        const imageData = cx.getImageData(0, 0, c.width, c.height);
+        const d = imageData.data;
+
+        // Sample the pink from corners to get accurate reference
+        const refR = 255, refG = 105, refB = 180; // #FF69B4
+
+        for (let i = 0; i < d.length; i += 4) {
+            const r = d[i], g = d[i+1], b = d[i+2];
+            // Distance from reference pink
+            const dist = Math.sqrt(
+                (r - refR) ** 2 +
+                (g - refG) ** 2 +
+                (b - refB) ** 2
+            );
+            if (dist < PINK_TOLERANCE) {
+                d[i+3] = 0; // make transparent
+            }
+        }
+        cx.putImageData(imageData, 0, 0);
+        return c;
+    }
+
+    function loadSprite(src) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => resolve(removePinkBackground(img));
+            img.onerror = () => reject(new Error('Failed to load: ' + src));
+            img.src = src;
+        });
+    }
+
+    // ─── INPUT ───
+    const keys = {};
+    window.addEventListener('keydown', e => {
+        keys[e.code] = true;
+        // Prevent page scroll on arrow/space
+        if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) {
+            e.preventDefault();
+        }
+    });
+    window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+    // ─── PLAYER ───
+    const player = {
+        x: CANVAS_W / 2 - 40,
+        y: GROUND_Y,
+        vx: 0,
+        vy: 0,
+        w: 0,           // set after sprite load
+        h: CHAR_RENDER_H,
+        onGround: true,
+        facing: 1,       // 1 = right, -1 = left
+        frame: 0,
+        animTimer: 0,
+        state: 'idle'    // idle | run | jump
+    };
+
+    // ─── SPRITES ───
+    let sprites = {
+        idle: null,
+        run: [],         // array of canvases
+        jump: null
+    };
+
+    // ─── GAME STATE ───
+    let loaded = false;
+
+    async function init() {
+        const loadingEl = document.getElementById('loading');
+        try {
+            const [idle, run1, run2, run3, jump] = await Promise.all([
+                loadSprite('assets/sprites/idle.png'),
+                loadSprite('assets/sprites/run1.png'),
+                loadSprite('assets/sprites/run2.png'),
+                loadSprite('assets/sprites/run3.png'),
+                loadSprite('assets/sprites/jump.png')
+            ]);
+
+            sprites.idle = idle;
+            sprites.run = [run1, run2, run3];
+            sprites.jump = jump;
+
+            // Calculate render width based on idle sprite aspect ratio
+            const aspect = idle.width / idle.height;
+            player.w = Math.round(CHAR_RENDER_H * aspect);
+            player.y = GROUND_Y - player.h;
+
+            loaded = true;
+            loadingEl.classList.add('hidden');
+            console.log('All sprites loaded! Use arrow keys / WASD to move, Space / Up to jump.');
+        } catch (err) {
+            loadingEl.innerHTML =
+                'Could not load sprites.<br><br>' +
+                'Please save your 5 images to:<br>' +
+                '<b>assets/sprites/idle.png</b> (standing pose)<br>' +
+                '<b>assets/sprites/run1.png</b> (right leg forward)<br>' +
+                '<b>assets/sprites/run2.png</b> (left leg forward)<br>' +
+                '<b>assets/sprites/run3.png</b> (mid-stride / action)<br>' +
+                '<b>assets/sprites/jump.png</b> (jumping pose)<br>';
+            console.error(err);
+        }
+    }
+
+    // ─── UPDATE ───
+    function update() {
+        if (!loaded) return;
+
+        // Horizontal movement
+        let moving = false;
+        if (keys['ArrowLeft'] || keys['KeyA']) {
+            player.vx -= MOVE_SPEED * 0.3;
+            player.facing = -1;
+            moving = true;
+        }
+        if (keys['ArrowRight'] || keys['KeyD']) {
+            player.vx += MOVE_SPEED * 0.3;
+            player.facing = 1;
+            moving = true;
+        }
+
+        // Friction
+        player.vx *= FRICTION;
+        if (Math.abs(player.vx) < 0.2) player.vx = 0;
+
+        // Clamp speed
+        if (player.vx > MOVE_SPEED) player.vx = MOVE_SPEED;
+        if (player.vx < -MOVE_SPEED) player.vx = -MOVE_SPEED;
+
+        // Jump
+        if ((keys['Space'] || keys['ArrowUp'] || keys['KeyW']) && player.onGround) {
+            player.vy = JUMP_FORCE;
+            player.onGround = false;
+        }
+
+        // Gravity
+        player.vy += GRAVITY;
+        player.y += player.vy;
+        player.x += player.vx;
+
+        // Ground collision
+        if (player.y >= GROUND_Y - player.h) {
+            player.y = GROUND_Y - player.h;
+            player.vy = 0;
+            player.onGround = true;
+        }
+
+        // Wrap around screen edges
+        if (player.x > CANVAS_W) player.x = -player.w;
+        if (player.x + player.w < 0) player.x = CANVAS_W;
+
+        // Animation state
+        if (!player.onGround) {
+            player.state = 'jump';
+        } else if (Math.abs(player.vx) > 0.5) {
+            player.state = 'run';
+        } else {
+            player.state = 'idle';
+        }
+
+        // Advance run animation
+        if (player.state === 'run') {
+            player.animTimer++;
+            if (player.animTimer >= ANIM_SPEED) {
+                player.animTimer = 0;
+                player.frame = (player.frame + 1) % sprites.run.length;
+            }
+        } else {
+            player.frame = 0;
+            player.animTimer = 0;
+        }
+    }
+
+    // ─── DRAW ───
+    function draw() {
+        // Clear
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+        if (!loaded) return;
+
+        // Ground line
+        ctx.fillStyle = '#333';
+        ctx.fillRect(0, GROUND_Y, CANVAS_W, CANVAS_H - GROUND_Y);
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, GROUND_Y);
+        ctx.lineTo(CANVAS_W, GROUND_Y);
+        ctx.stroke();
+
+        // Pick current sprite
+        let sprite;
+        if (player.state === 'jump') {
+            sprite = sprites.jump;
+        } else if (player.state === 'run') {
+            sprite = sprites.run[player.frame];
+        } else {
+            sprite = sprites.idle;
+        }
+
+        // Draw character (flip if facing left)
+        ctx.save();
+        if (player.facing === -1) {
+            ctx.translate(player.x + player.w, player.y);
+            ctx.scale(-1, 1);
+            ctx.drawImage(sprite, 0, 0, player.w, player.h);
+        } else {
+            ctx.drawImage(sprite, player.x, player.y, player.w, player.h);
+        }
+        ctx.restore();
+
+        // Controls hint
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = '14px Arial';
+        ctx.fillText('Arrow Keys / WASD = Move    |    Space / Up = Jump', 20, 25);
+    }
+
+    // ─── GAME LOOP ───
+    function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    // ─── START ───
+    init();
+    loop();
+    </script>
+</body>
+</html>
