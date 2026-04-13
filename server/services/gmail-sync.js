@@ -3,7 +3,7 @@ const { google } = require('googleapis');
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 // Legacy fallback token for info@modco.com
-const LEGACY_REFRESH_TOKEN = process.env.GOOGLE_LEGACY_REFRESH_TOKEN;
+const LEGACY_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
 
 async function getGmailClient(pool, emailAddress) {
   // Try to get token from DB first
