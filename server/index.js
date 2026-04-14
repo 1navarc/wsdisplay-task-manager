@@ -246,6 +246,13 @@ runMigrations(pool).then(async () => {
   } catch (err) {
     console.error('AI service init (non-fatal):', err.message);
   }
+  // Initialize daily email report scheduler (reads app_settings, sets cron)
+  try {
+    const { initDailyReportScheduler } = require('./services/daily-report');
+    initDailyReportScheduler();
+  } catch (err) {
+    console.error('Daily report scheduler init (non-fatal):', err.message);
+  }
   server.listen(PORT, () => console.log('WSDisplay Email API running on port ' + PORT));
 }).catch(err => {
   console.error('Failed to run migrations:', err);

@@ -9954,6 +9954,35 @@ async function loadSettingsAI(content) {
 
         <div class="settings-card" style="margin-top:16px;">
             <div class="settings-card-header">
+                <div class="settings-card-title">Email Metrics &amp; Insights</div>
+                <div style="display:flex;gap:8px;">
+                    <button onclick="openMetricsFilters()" style="padding:6px 14px;background:#fff;color:#374151;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Filters</button>
+                    <button id="btnRunMetrics" onclick="runMetricsNow()" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Run Analysis</button>
+                </div>
+            </div>
+            <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
+                Rep response times, most common customer questions (counted by unique customer), and threads that need management attention.
+            </div>
+            <div id="metricsStatusCard" style="font-size:13px;color:#6b7280;">No runs yet.</div>
+            <div id="metricsResultsCard" style="margin-top:12px;"></div>
+        </div>
+
+        <div class="settings-card" style="margin-top:16px;">
+            <div class="settings-card-header">
+                <div class="settings-card-title">Daily Email Report</div>
+                <div style="display:flex;gap:8px;">
+                    <button onclick="sendDailyReportTest()" style="padding:6px 14px;background:#fff;color:#374151;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Send Test Now</button>
+                    <button onclick="saveDailyReportConfig()" style="padding:6px 14px;background:#059669;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Save</button>
+                </div>
+            </div>
+            <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
+                Email a daily summary of the past 24h — response times, top customer questions, and flags — to the team.
+            </div>
+            <div id="dailyReportCard" style="font-size:13px;color:#6b7280;">Loading…</div>
+        </div>
+
+        <div class="settings-card" style="margin-top:16px;">
+            <div class="settings-card-header">
                 <div class="settings-card-title">Training Rules & Examples</div>
                 <button onclick="openAddRuleModal()" style="padding:6px 14px;background:#7c3aed;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">+ Add Rule</button>
             </div>
@@ -10092,6 +10121,8 @@ async function loadSettingsAI(content) {
 
     // Kick off ingestion status loading (shows latest run + polls if running)
     try { refreshIngestionStatus(); } catch (e) {}
+    try { refreshMetricsStatus(); } catch (e) {}
+    try { refreshDailyReportCard(); } catch (e) {}
 }
 
 // ===== Training Mailbox Ingestion UI =====
@@ -10276,6 +10307,371 @@ async function saveIngestionFilters() {
         settingsToast('Filters saved', 'success');
         const m = document.getElementById('ingestFiltersModal'); if (m) m.remove();
     } catch (e) { settingsToast('Save failed: ' + e.message, 'error'); }
+}
+
+// ===== Email Metrics & Insights UI =====
+let _metricsPollTimer = null;
+let _metricsCurrentRunId = null;
+
+function _msToHuman(ms) {
+    if (!ms || ms <= 0) return '—';
+    const sec = Math.floor(ms / 1000);
+    if (sec < 60) return sec + 's';
+    const min = Math.floor(sec / 60);
+    if (min < 60) return min + 'm';
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return hr + 'h ' + (min % 60) + 'm';
+    const d = Math.floor(hr / 24);
+    return d + 'd ' + (hr % 24) + 'h';
+}
+
+async function refreshMetricsStatus() {
+    const el = document.getElementById('metricsStatusCard');
+    if (!el) return;
+    try {
+        const res = await fetch('/api/ai/metrics/runs?limit=1', { credentials: 'include' });
+        if (!res.ok) { el.innerHTML = '<span style="color:#9ca3af;">No runs yet.</span>'; return; }
+        const runs = await res.json();
+        if (!runs.length) { el.innerHTML = '<span style="color:#9ca3af;">No runs yet. Click <b>Run Analysis</b> to start.</span>'; return; }
+        const run = runs[0];
+        renderMetricsRun(run);
+        if (run.status === 'running') {
+            _metricsCurrentRunId = run.id;
+            if (!_metricsPollTimer) _metricsPollTimer = setInterval(pollMetricsRun, 2500);
+        } else {
+            _metricsCurrentRunId = null;
+            if (_metricsPollTimer) { clearInterval(_metricsPollTimer); _metricsPollTimer = null; }
+            renderMetricsResults(run.id);
+        }
+    } catch (e) {
+        el.innerHTML = '<span style="color:#ef4444;">Failed to load metrics status.</span>';
+    }
+}
+
+async function pollMetricsRun() {
+    if (!_metricsCurrentRunId) return;
+    try {
+        const res = await fetch('/api/ai/metrics/runs/' + _metricsCurrentRunId + '/status', { credentials: 'include' });
+        if (!res.ok) return;
+        const run = await res.json();
+        renderMetricsRun(run);
+        if (run.status !== 'running') {
+            clearInterval(_metricsPollTimer); _metricsPollTimer = null;
+            const id = _metricsCurrentRunId; _metricsCurrentRunId = null;
+            if (run.status === 'complete') renderMetricsResults(id);
+        }
+    } catch (e) {}
+}
+
+function renderMetricsRun(run) {
+    const el = document.getElementById('metricsStatusCard');
+    if (!el) return;
+    const total = run.total_threads || 0;
+    const done = (run.processed_count || 0) + (run.skipped_count || 0) + (run.error_count || 0);
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    const cost = Number(run.total_cost_usd || 0).toFixed(4);
+    const elapsedMs = (run.completed_at ? new Date(run.completed_at) : new Date()) - new Date(run.started_at);
+    const elapsedMin = (elapsedMs / 60000).toFixed(1);
+    const statusColor = {
+        running: '#2563eb', complete: '#059669', failed: '#dc2626', cancelled: '#d97706'
+    }[run.status] || '#6b7280';
+    const cancelBtn = run.status === 'running'
+        ? '<button onclick="cancelMetricsRun(\'' + run.id + '\')" style="padding:6px 14px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Cancel</button>'
+        : '';
+    el.innerHTML =
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">' +
+            '<span style="padding:3px 8px;background:' + statusColor + '22;color:' + statusColor + ';border-radius:4px;font-size:11px;font-weight:700;">' + (run.status || '').toUpperCase() + '</span>' +
+            '<span style="font-size:12px;color:#6b7280;">' + escapeHtml(run.mailbox_email || '') + '</span>' +
+            '<span style="flex:1;"></span>' + cancelBtn +
+        '</div>' +
+        '<div style="background:#f3f4f6;border-radius:8px;height:10px;overflow:hidden;margin-bottom:8px;">' +
+            '<div style="background:' + statusColor + ';height:100%;width:' + pct + '%;transition:width 0.3s;"></div>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;font-size:12px;">' +
+            '<div><b>' + done + '/' + (total || '?') + '</b><br><span style="color:#9ca3af;">threads</span></div>' +
+            '<div><b>' + (run.processed_count || 0) + '</b><br><span style="color:#9ca3af;">processed</span></div>' +
+            '<div><b>' + (run.skipped_count || 0) + '</b><br><span style="color:#9ca3af;">skipped</span></div>' +
+            '<div><b>' + (run.flags_created || 0) + '</b><br><span style="color:#9ca3af;">flags</span></div>' +
+            '<div><b>$' + cost + '</b><br><span style="color:#9ca3af;">cost</span></div>' +
+            '<div><b>' + elapsedMin + 'm</b><br><span style="color:#9ca3af;">elapsed</span></div>' +
+        '</div>' +
+        (run.current_status_line ? '<div style="margin-top:8px;font-size:12px;color:#6b7280;font-style:italic;">' + escapeHtml(run.current_status_line) + '</div>' : '') +
+        (run.last_error ? '<div style="margin-top:8px;font-size:12px;color:#dc2626;">Error: ' + escapeHtml(run.last_error) + '</div>' : '');
+}
+
+async function renderMetricsResults(runId) {
+    const wrap = document.getElementById('metricsResultsCard');
+    if (!wrap) return;
+    try {
+        const [runRes, flagsRes] = await Promise.all([
+            fetch('/api/ai/metrics/runs/' + runId + '/status', { credentials: 'include' }),
+            fetch('/api/ai/metrics/runs/' + runId + '/flags?limit=100', { credentials: 'include' }),
+        ]);
+        if (!runRes.ok) return;
+        const run = await runRes.json();
+        const flags = flagsRes.ok ? await flagsRes.json() : [];
+        const summary = run.summary || {};
+        const repStats = run.rep_stats || [];
+        const catStats = run.category_stats || [];
+
+        const kpi = (label, val, sub) =>
+            '<div style="flex:1;min-width:110px;padding:10px 12px;background:#f8fafc;border-radius:8px;text-align:center;">' +
+                '<div style="font-size:18px;font-weight:700;color:#0f172a;">' + val + '</div>' +
+                '<div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-top:2px;">' + label + '</div>' +
+                (sub ? '<div style="font-size:10px;color:#94a3b8;margin-top:1px;">' + sub + '</div>' : '') +
+            '</div>';
+
+        const repRows = repStats.slice(0, 10).map(r =>
+            '<tr>' +
+                '<td style="padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12px;">' + escapeHtml(r.rep_email || '—') + '</td>' +
+                '<td style="padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12px;text-align:right;">' + r.threads_first_responder + '</td>' +
+                '<td style="padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12px;text-align:right;">' + _msToHuman(r.first_response_ms_avg) + '</td>' +
+                '<td style="padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12px;text-align:right;">' + _msToHuman(r.first_response_ms_median) + '</td>' +
+                '<td style="padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12px;text-align:right;">' + _msToHuman(r.ongoing_response_ms_avg) + '</td>' +
+                '<td style="padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12px;text-align:right;color:#64748b;">' + r.ongoing_reply_count + '</td>' +
+            '</tr>').join('');
+
+        const catRows = catStats.slice(0, 12).map(c =>
+            '<tr>' +
+                '<td style="padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12px;">' + escapeHtml((c.category || '').replace(/_/g, ' ')) + '</td>' +
+                '<td style="padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12px;text-align:right;font-weight:600;">' + c.unique_customer_count + '</td>' +
+                '<td style="padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12px;text-align:right;color:#64748b;">' + c.thread_count + '</td>' +
+                '<td style="padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12px;text-align:right;color:' + (c.negative_count > 0 ? '#b91c1c' : '#94a3b8') + ';">' + c.negative_count + '</td>' +
+            '</tr>').join('');
+
+        const flagColor = sev => sev === 'high' ? '#b91c1c' : sev === 'medium' ? '#b45309' : '#64748b';
+        const flagBg = sev => sev === 'high' ? '#fee2e2' : sev === 'medium' ? '#fef3c7' : '#f1f5f9';
+        const flagRows = flags.slice(0, 30).map(f =>
+            '<div style="padding:10px 12px;border-top:1px solid #f1f5f9;display:flex;gap:10px;">' +
+                '<div style="flex-shrink:0;padding:2px 8px;background:' + flagBg(f.severity) + ';color:' + flagColor(f.severity) + ';font-size:10px;border-radius:4px;text-transform:uppercase;letter-spacing:.04em;font-weight:700;height:fit-content;">' + escapeHtml((f.flag_type || '').replace(/_/g, ' ')) + '</div>' +
+                '<div style="flex:1;min-width:0;">' +
+                    '<div style="font-size:13px;color:#0f172a;font-weight:500;">' + escapeHtml(f.thread_subject || f.reason || '(no subject)') + '</div>' +
+                    '<div style="font-size:11px;color:#64748b;margin-top:2px;">' + escapeHtml(f.reason || '') + '</div>' +
+                    (f.customer_email || f.rep_email ? '<div style="font-size:11px;color:#94a3b8;margin-top:2px;">' +
+                        (f.customer_email ? 'Customer: ' + escapeHtml(f.customer_email) : '') +
+                        (f.rep_email ? ' · Rep: ' + escapeHtml(f.rep_email) : '') +
+                    '</div>' : '') +
+                '</div>' +
+            '</div>').join('');
+
+        wrap.innerHTML =
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">' +
+                kpi('Threads', summary.total_threads || 0) +
+                kpi('Answered', summary.answered_threads || 0) +
+                kpi('Unanswered', summary.unanswered_threads || 0) +
+                kpi('SLA breach', summary.sla_breach_count || 0, '> ' + (summary.sla_hours || 4) + 'h') +
+                kpi('Angry', summary.negative_sentiment_count || 0) +
+                kpi('First avg', _msToHuman(summary.overall_first_response_avg_ms)) +
+                kpi('First median', _msToHuman(summary.overall_first_response_median_ms)) +
+            '</div>' +
+            (repStats.length ?
+                '<div style="font-size:13px;font-weight:700;color:#0f172a;margin:18px 0 6px;">Rep Leaderboard</div>' +
+                '<div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">' +
+                '<table style="width:100%;border-collapse:collapse;">' +
+                    '<thead><tr style="background:#f8fafc;">' +
+                        '<th style="padding:6px 10px;text-align:left;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;">Rep</th>' +
+                        '<th style="padding:6px 10px;text-align:right;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;">Threads</th>' +
+                        '<th style="padding:6px 10px;text-align:right;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;">First avg</th>' +
+                        '<th style="padding:6px 10px;text-align:right;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;">First median</th>' +
+                        '<th style="padding:6px 10px;text-align:right;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;">Ongoing avg</th>' +
+                        '<th style="padding:6px 10px;text-align:right;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;">Replies</th>' +
+                    '</tr></thead>' +
+                    '<tbody>' + repRows + '</tbody>' +
+                '</table></div>'
+            : '') +
+            (catStats.length ?
+                '<div style="font-size:13px;font-weight:700;color:#0f172a;margin:18px 0 2px;">What customers asked about</div>' +
+                '<div style="font-size:11px;color:#6b7280;margin-bottom:6px;">Counted by unique customer — one customer asking five times counts once.</div>' +
+                '<div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">' +
+                '<table style="width:100%;border-collapse:collapse;">' +
+                    '<thead><tr style="background:#f8fafc;">' +
+                        '<th style="padding:6px 10px;text-align:left;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;">Topic</th>' +
+                        '<th style="padding:6px 10px;text-align:right;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;">Customers</th>' +
+                        '<th style="padding:6px 10px;text-align:right;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;">Threads</th>' +
+                        '<th style="padding:6px 10px;text-align:right;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;">Angry</th>' +
+                    '</tr></thead>' +
+                    '<tbody>' + catRows + '</tbody>' +
+                '</table></div>'
+            : '') +
+            (flags.length ?
+                '<div style="font-size:13px;font-weight:700;color:#0f172a;margin:18px 0 6px;">Needs management attention · ' + flags.length + '</div>' +
+                '<div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">' + flagRows + '</div>'
+            : '<div style="font-size:12px;color:#9ca3af;margin-top:14px;">No flags for this run.</div>');
+    } catch (e) {
+        wrap.innerHTML = '<div style="font-size:12px;color:#ef4444;">Failed to load results.</div>';
+    }
+}
+
+async function runMetricsNow() {
+    const btn = document.getElementById('btnRunMetrics');
+    if (btn) { btn.disabled = true; btn.textContent = 'Starting…'; }
+    try {
+        const res = await fetch('/api/ai/metrics/runs', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to start');
+        settingsToast('Analysis started', 'success');
+        _metricsCurrentRunId = data.run_id;
+        refreshMetricsStatus();
+    } catch (e) {
+        settingsToast('Start failed: ' + e.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Run Analysis'; }
+    }
+}
+
+async function cancelMetricsRun(runId) {
+    if (!confirm('Cancel this analysis run?')) return;
+    try {
+        await fetch('/api/ai/metrics/runs/' + runId + '/cancel', { method: 'POST', credentials: 'include' });
+        settingsToast('Cancel requested…', 'info');
+    } catch (e) { settingsToast('Cancel failed: ' + e.message, 'error'); }
+}
+
+async function openMetricsFilters() {
+    let cfg = {};
+    try {
+        const res = await fetch('/api/ai/metrics/config', { credentials: 'include' });
+        cfg = await res.json();
+    } catch (e) { settingsToast('Failed to load filters', 'error'); return; }
+
+    const listField = (v) => Array.isArray(v) ? v.join(', ') : (v || '');
+
+    const modal = document.createElement('div');
+    modal.id = 'metricsFiltersModal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:300;display:flex;align-items:center;justify-content:center;';
+    modal.innerHTML =
+        '<div style="background:#fff;border-radius:12px;padding:20px;max-width:680px;width:92%;max-height:86vh;overflow-y:auto;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
+                '<h3 style="margin:0;font-size:16px;">Metrics Filters</h3>' +
+                '<button onclick="document.getElementById(\'metricsFiltersModal\').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;">&times;</button>' +
+            '</div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;">' +
+                '<label>Mailbox email<input id="m_mailbox" value="' + escapeHtml(cfg.mailbox_email || '') + '" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+                '<label>Date range (days back, if no explicit dates)<input id="m_days" type="number" value="' + (cfg.date_range_days || 7) + '" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+                '<label>Date from (optional ISO)<input id="m_from" value="' + escapeHtml(cfg.date_from || '') + '" placeholder="2026-04-01" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+                '<label>Date to (optional ISO)<input id="m_to" value="' + escapeHtml(cfg.date_to || '') + '" placeholder="2026-04-14" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+                '<label>First-response SLA (hours)<input id="m_sla" type="number" value="' + (cfg.first_response_sla_hours || 4) + '" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+                '<label>Unanswered alert (hours)<input id="m_unans" type="number" value="' + (cfg.unanswered_alert_hours || 24) + '" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+                '<label>Repeat-problem threshold (unique customers)<input id="m_rept" type="number" value="' + (cfg.repeat_problem_threshold || 3) + '" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+                '<label>Max threads / run<input id="m_max" type="number" value="' + (cfg.max_threads || 1000) + '" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+                '<label style="display:flex;align-items:center;gap:6px;margin-top:18px;"><input id="m_bh" type="checkbox" ' + (cfg.business_hours_only ? 'checked' : '') + '> Business hours only</label>' +
+                '<label style="display:flex;align-items:center;gap:6px;margin-top:18px;"><input id="m_aicat" type="checkbox" ' + (cfg.enable_ai_categorization ? 'checked' : '') + '> AI categorization</label>' +
+                '<label>Business hours start<input id="m_bhs" value="' + escapeHtml(cfg.business_hours_start || '08:00') + '" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+                '<label>Business hours end<input id="m_bhe" value="' + escapeHtml(cfg.business_hours_end || '18:00') + '" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+                '<label style="grid-column:1/-1;">Excluded domains (comma)<input id="m_excdom" value="' + escapeHtml(listField(cfg.excluded_domains)) + '" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+                '<label style="grid-column:1/-1;">Rep whitelist (comma, blank = all)<input id="m_reps" value="' + escapeHtml(listField(cfg.rep_whitelist)) + '" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+                '<label style="grid-column:1/-1;">Subject exclude (comma)<input id="m_subexc" value="' + escapeHtml(listField(cfg.subject_exclude_keywords)) + '" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+            '</div>' +
+            '<div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">' +
+                '<button onclick="document.getElementById(\'metricsFiltersModal\').remove()" style="padding:8px 16px;background:#fff;color:#6b7280;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;">Cancel</button>' +
+                '<button onclick="saveMetricsFilters()" style="padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;">Save</button>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(modal);
+}
+
+async function saveMetricsFilters() {
+    const payload = {
+        mailbox_email: document.getElementById('m_mailbox').value.trim(),
+        date_range_days: parseInt(document.getElementById('m_days').value) || 7,
+        date_from: document.getElementById('m_from').value.trim() || null,
+        date_to: document.getElementById('m_to').value.trim() || null,
+        first_response_sla_hours: parseInt(document.getElementById('m_sla').value) || 4,
+        unanswered_alert_hours: parseInt(document.getElementById('m_unans').value) || 24,
+        repeat_problem_threshold: parseInt(document.getElementById('m_rept').value) || 3,
+        max_threads: parseInt(document.getElementById('m_max').value) || 1000,
+        business_hours_only: document.getElementById('m_bh').checked,
+        enable_ai_categorization: document.getElementById('m_aicat').checked,
+        business_hours_start: document.getElementById('m_bhs').value.trim() || '08:00',
+        business_hours_end: document.getElementById('m_bhe').value.trim() || '18:00',
+        excluded_domains: _parseList(document.getElementById('m_excdom').value),
+        rep_whitelist: _parseList(document.getElementById('m_reps').value),
+        subject_exclude_keywords: _parseList(document.getElementById('m_subexc').value),
+    };
+    try {
+        const res = await fetch('/api/ai/metrics/config', {
+            method: 'PUT', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('save failed');
+        settingsToast('Filters saved', 'success');
+        const m = document.getElementById('metricsFiltersModal'); if (m) m.remove();
+    } catch (e) { settingsToast('Save failed: ' + e.message, 'error'); }
+}
+
+// ===== Daily Email Report UI =====
+async function refreshDailyReportCard() {
+    const el = document.getElementById('dailyReportCard');
+    if (!el) return;
+    try {
+        const res = await fetch('/api/ai/metrics/report/config', { credentials: 'include' });
+        const cfg = res.ok ? await res.json() : {};
+        const last = cfg._last || null;
+        const lastLine = last ? ('Last sent: ' + new Date(last.sent_at).toLocaleString() + ' to ' + (last.sent_to || []).join(', ')) : 'Never sent.';
+        el.innerHTML =
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;">' +
+                '<label style="grid-column:1/-1;display:flex;align-items:center;gap:8px;">' +
+                    '<input id="dr_enabled" type="checkbox" ' + (cfg.enabled ? 'checked' : '') + '>' +
+                    '<b>Enable daily email reports</b>' +
+                '</label>' +
+                '<label style="grid-column:1/-1;">Recipients (comma-separated emails)<input id="dr_recipients" value="' + escapeHtml((cfg.recipients || []).join(', ')) + '" placeholder="manager@sdsign.com, ops@sdsign.com" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;margin-top:2px;"></label>' +
+                '<label>Send from mailbox<input id="dr_from" value="' + escapeHtml(cfg.send_from_mailbox || '') + '" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+                '<label>Time (HH:MM)<input id="dr_time" value="' + escapeHtml(cfg.send_time || '08:00') + '" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+                '<label>Timezone<input id="dr_tz" value="' + escapeHtml(cfg.timezone || 'America/Los_Angeles') + '" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+                '<label>Period (hours)<input id="dr_period" type="number" value="' + (cfg.period_hours || 24) + '" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+                '<label style="display:flex;align-items:center;gap:6px;"><input id="dr_reps" type="checkbox" ' + (cfg.include_rep_leaderboard !== false ? 'checked' : '') + '> Include rep leaderboard</label>' +
+                '<label style="display:flex;align-items:center;gap:6px;"><input id="dr_cats" type="checkbox" ' + (cfg.include_categories !== false ? 'checked' : '') + '> Include customer questions</label>' +
+                '<label style="display:flex;align-items:center;gap:6px;"><input id="dr_flags" type="checkbox" ' + (cfg.include_flags !== false ? 'checked' : '') + '> Include management flags</label>' +
+                '<label>Top N categories<input id="dr_topn" type="number" value="' + (cfg.top_n_categories || 8) + '" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>' +
+            '</div>' +
+            '<div style="margin-top:10px;font-size:11px;color:#6b7280;">' + escapeHtml(lastLine) + '</div>';
+    } catch (e) {
+        el.innerHTML = '<span style="color:#ef4444;">Failed to load daily report config.</span>';
+    }
+}
+
+async function saveDailyReportConfig() {
+    const payload = {
+        enabled: document.getElementById('dr_enabled').checked,
+        recipients: _parseList(document.getElementById('dr_recipients').value),
+        send_from_mailbox: document.getElementById('dr_from').value.trim(),
+        send_time: document.getElementById('dr_time').value.trim() || '08:00',
+        timezone: document.getElementById('dr_tz').value.trim() || 'America/Los_Angeles',
+        period_hours: parseInt(document.getElementById('dr_period').value) || 24,
+        include_rep_leaderboard: document.getElementById('dr_reps').checked,
+        include_categories: document.getElementById('dr_cats').checked,
+        include_flags: document.getElementById('dr_flags').checked,
+        top_n_categories: parseInt(document.getElementById('dr_topn').value) || 8,
+    };
+    try {
+        const res = await fetch('/api/ai/metrics/report/config', {
+            method: 'PUT', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('save failed');
+        settingsToast('Daily report config saved', 'success');
+        refreshDailyReportCard();
+    } catch (e) { settingsToast('Save failed: ' + e.message, 'error'); }
+}
+
+async function sendDailyReportTest() {
+    if (!confirm('Run the analysis now and email the report to the configured recipients? This may take a minute or two.')) return;
+    settingsToast('Sending test report — this may take a minute…', 'info');
+    try {
+        const res = await fetch('/api/ai/metrics/report/send-test', {
+            method: 'POST', credentials: 'include',
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'send failed');
+        settingsToast('Sent to: ' + (data.sent || []).join(', '), 'success');
+        refreshDailyReportCard();
+    } catch (e) { settingsToast('Test send failed: ' + e.message, 'error'); }
 }
 
 async function saveAiGlobalMode(mode) {
@@ -11462,7 +11858,7 @@ async function loadKnowledgeBasePage() {
                             const sourceLabel = item.category === 'customer_qa' ? 'Q&A Answer' : (item.source_type || 'manual');
                             const badgeClass = item.category === 'customer_qa' ? 'customer_qa' : (item.source_type || 'manual');
                             return `
-                                <div class="kb-activity-row">
+                                <div class="kb-activity-row" onclick="viewKbArticle(${item.id})" style="cursor:pointer;" title="Click to view">
                                     <div class="kb-activity-icon ${iconClass}">${icon}</div>
                                     <div style="flex:1;min-width:0;">
                                         <div class="kb-activity-title">${escapeHtml(item.title)}</div>
@@ -11472,7 +11868,7 @@ async function loadKnowledgeBasePage() {
                                             ${item.category ? ' &middot; ' + escapeHtml(item.category) : ''}
                                         </div>
                                     </div>
-                                    <button onclick="viewKbArticle(${item.id})" style="padding:6px 12px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;cursor:pointer;color:#374151;font-weight:500;white-space:nowrap;">View</button>
+                                    <button onclick="event.stopPropagation(); viewKbArticle(${item.id})" style="padding:6px 12px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;cursor:pointer;color:#374151;font-weight:500;white-space:nowrap;">View</button>
                                 </div>
                             `;
                         }).join('')}

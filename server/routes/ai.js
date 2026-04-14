@@ -952,4 +952,107 @@ router.post('/ingestion/runs/:id/cancel', requireAuth, requireRole('manager'), a
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ===== EMAIL METRICS & INSIGHTS =====
+const emailMetrics = require('../services/email-metrics');
+
+router.get('/metrics/config', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const config = await emailMetrics.getFilterConfig();
+    res.json(config);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/metrics/config', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const saved = await emailMetrics.saveFilterConfig(req.body || {});
+    res.json(saved);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/metrics/runs', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const runId = await emailMetrics.startRun({
+      startedByUserId: req.session.userId,
+      filterOverrides: req.body && req.body.filterOverrides ? req.body.filterOverrides : null,
+    });
+    res.json({ run_id: runId });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/metrics/runs', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const rows = await emailMetrics.listRuns(parseInt(req.query.limit) || 20);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/metrics/runs/:id/status', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const row = await emailMetrics.getRunStatus(req.params.id);
+    if (!row) return res.status(404).json({ error: 'Run not found' });
+    res.json(row);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/metrics/runs/:id/flags', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const rows = await emailMetrics.getRunFlags(req.params.id, {
+      flag_type: req.query.flag_type || null,
+      acknowledged: req.query.unacknowledged === '1' ? false : undefined,
+      limit: parseInt(req.query.limit) || 500,
+    });
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/metrics/runs/:id/cancel', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const was = emailMetrics.requestCancel(req.params.id);
+    await pool.query(
+      `UPDATE email_metrics_runs SET cancel_requested = true WHERE id = $1`,
+      [req.params.id]
+    );
+    res.json({ cancel_requested: true, was_in_memory: was });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/metrics/flags/:id/ack', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    await emailMetrics.acknowledgeFlag(req.params.id, req.session.userId);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ===== DAILY EMAIL REPORT =====
+const dailyReport = require('../services/daily-report');
+
+router.get('/metrics/report/config', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const cfg = await dailyReport.getReportConfig();
+    // Include "last sent" for display
+    const lastRow = await pool.query(
+      `SELECT value FROM app_settings WHERE key = 'daily_email_report_last'`
+    );
+    cfg._last = lastRow.rows[0] ? lastRow.rows[0].value : null;
+    res.json(cfg);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/metrics/report/config', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const saved = await dailyReport.saveReportConfig(req.body || {});
+    res.json(saved);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/metrics/report/send-test', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const result = await dailyReport.sendDailyReport({ dryRun: true });
+    res.json(result);
+  } catch (err) {
+    console.error('Daily report test send failed:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
