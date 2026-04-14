@@ -886,4 +886,70 @@ router.post('/unanswered/:logId/dismiss', requireAuth, async (req, res) => {
   }
 });
 
+// ===== TRAINING INGESTION (mailbox -> knowledge base) =====
+const trainingIngest = require('../services/training-ingestion');
+
+// Get / save filter config
+router.get('/ingestion/config', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const config = await trainingIngest.getFilterConfig();
+    res.json(config);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/ingestion/config', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const saved = await trainingIngest.saveFilterConfig(req.body || {});
+    res.json(saved);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Start a run. Body can override filters for this run only (not saved).
+router.post('/ingestion/runs', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const runId = await trainingIngest.startRun({
+      startedByUserId: req.session.userId,
+      filterOverrides: req.body && req.body.filterOverrides ? req.body.filterOverrides : null,
+    });
+    res.json({ run_id: runId });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// List recent runs
+router.get('/ingestion/runs', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const rows = await trainingIngest.listRuns(parseInt(req.query.limit) || 20);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Get one run's status (polled by UI)
+router.get('/ingestion/runs/:id/status', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const row = await trainingIngest.getRunStatus(req.params.id);
+    if (!row) return res.status(404).json({ error: 'Run not found' });
+    res.json(row);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Get the per-thread log for a run
+router.get('/ingestion/runs/:id/log', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const rows = await trainingIngest.getRunLog(req.params.id, parseInt(req.query.limit) || 500);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Cancel a running run
+router.post('/ingestion/runs/:id/cancel', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const was = trainingIngest.requestCancel(req.params.id);
+    await pool.query(
+      `UPDATE training_ingestion_runs SET cancel_requested = true WHERE id = $1`,
+      [req.params.id]
+    );
+    res.json({ cancel_requested: true, was_in_memory: was });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;

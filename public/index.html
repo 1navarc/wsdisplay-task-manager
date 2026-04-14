@@ -9940,6 +9940,20 @@ async function loadSettingsAI(content) {
 
         <div class="settings-card" style="margin-top:16px;">
             <div class="settings-card-header">
+                <div class="settings-card-title">Training Mailbox Ingestion</div>
+                <div style="display:flex;gap:8px;">
+                    <button onclick="openIngestionFilters()" style="padding:6px 14px;background:#fff;color:#374151;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Filters</button>
+                    <button id="btnRunIngest" onclick="runIngestionNow()" style="padding:6px 14px;background:#059669;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Run Now</button>
+                </div>
+            </div>
+            <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
+                Read historical email threads from a training mailbox and extract Q/A examples + factual knowledge.
+            </div>
+            <div id="ingestionStatusCard" style="font-size:13px;color:#6b7280;">Checking for active run...</div>
+        </div>
+
+        <div class="settings-card" style="margin-top:16px;">
+            <div class="settings-card-header">
                 <div class="settings-card-title">Training Rules & Examples</div>
                 <button onclick="openAddRuleModal()" style="padding:6px 14px;background:#7c3aed;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">+ Add Rule</button>
             </div>
@@ -10075,6 +10089,193 @@ async function loadSettingsAI(content) {
     } catch (e) {
         document.getElementById('aiKbStats').innerHTML = '<span style="color:#ef4444;">Error connecting to knowledge base</span>';
     }
+
+    // Kick off ingestion status loading (shows latest run + polls if running)
+    try { refreshIngestionStatus(); } catch (e) {}
+}
+
+// ===== Training Mailbox Ingestion UI =====
+let _ingestPollTimer = null;
+let _ingestCurrentRunId = null;
+
+async function refreshIngestionStatus() {
+    const el = document.getElementById('ingestionStatusCard');
+    if (!el) return;
+    try {
+        const res = await fetch('/api/ai/ingestion/runs?limit=1', { credentials: 'include' });
+        if (!res.ok) { el.innerHTML = '<span style="color:#9ca3af;">No runs yet.</span>'; return; }
+        const runs = await res.json();
+        if (!runs.length) { el.innerHTML = '<span style="color:#9ca3af;">No runs yet. Click <b>Run Now</b> to ingest.</span>'; return; }
+        const run = runs[0];
+        renderIngestionRun(run);
+        if (run.status === 'running') {
+            _ingestCurrentRunId = run.id;
+            if (!_ingestPollTimer) _ingestPollTimer = setInterval(pollIngestionRun, 2000);
+        } else {
+            _ingestCurrentRunId = null;
+            if (_ingestPollTimer) { clearInterval(_ingestPollTimer); _ingestPollTimer = null; }
+        }
+    } catch (e) {
+        el.innerHTML = '<span style="color:#ef4444;">Failed to load ingestion status.</span>';
+    }
+}
+
+async function pollIngestionRun() {
+    if (!_ingestCurrentRunId) return;
+    try {
+        const res = await fetch('/api/ai/ingestion/runs/' + _ingestCurrentRunId + '/status', { credentials: 'include' });
+        if (!res.ok) return;
+        const run = await res.json();
+        renderIngestionRun(run);
+        if (run.status !== 'running') {
+            clearInterval(_ingestPollTimer); _ingestPollTimer = null; _ingestCurrentRunId = null;
+        }
+    } catch (e) {}
+}
+
+function renderIngestionRun(run) {
+    const el = document.getElementById('ingestionStatusCard');
+    if (!el) return;
+    const total = run.total_threads || 0;
+    const done = (run.processed_count || 0) + (run.skipped_count || 0) + (run.error_count || 0);
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    const cost = Number(run.total_cost_usd || 0).toFixed(4);
+    const elapsedMs = (run.completed_at ? new Date(run.completed_at) : new Date()) - new Date(run.started_at);
+    const elapsedMin = (elapsedMs / 60000).toFixed(1);
+    const statusColor = {
+        running: '#2563eb', complete: '#059669', failed: '#dc2626',
+        cancelled: '#d97706'
+    }[run.status] || '#6b7280';
+    const statusLabel = run.status.toUpperCase();
+
+    const cancelBtn = run.status === 'running'
+        ? `<button onclick="cancelIngestionRun('${run.id}')" style="padding:6px 14px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Cancel</button>`
+        : '';
+
+    el.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <span style="padding:3px 8px;background:${statusColor}22;color:${statusColor};border-radius:4px;font-size:11px;font-weight:700;">${statusLabel}</span>
+            <span style="font-size:12px;color:#6b7280;">${run.mailbox_email}</span>
+            <span style="flex:1;"></span>
+            ${cancelBtn}
+        </div>
+        <div style="background:#f3f4f6;border-radius:8px;height:10px;overflow:hidden;margin-bottom:8px;">
+            <div style="background:${statusColor};height:100%;width:${pct}%;transition:width 0.3s;"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;font-size:12px;">
+            <div><b>${done}/${total || '?'}</b><br><span style="color:#9ca3af;">threads</span></div>
+            <div><b>${run.processed_count || 0}</b><br><span style="color:#9ca3af;">processed</span></div>
+            <div><b>${run.skipped_count || 0}</b><br><span style="color:#9ca3af;">skipped</span></div>
+            <div><b>${run.error_count || 0}</b><br><span style="color:#9ca3af;">errors</span></div>
+            <div><b>${run.qa_created || 0}</b><br><span style="color:#9ca3af;">Q/A extracted</span></div>
+            <div><b>${run.facts_created || 0}</b><br><span style="color:#9ca3af;">facts</span></div>
+            <div><b>${run.conflicts_created || 0}</b><br><span style="color:#9ca3af;">conflicts</span></div>
+            <div><b>$${cost}</b><br><span style="color:#9ca3af;">cost</span></div>
+            <div><b>${elapsedMin}m</b><br><span style="color:#9ca3af;">elapsed</span></div>
+        </div>
+        ${run.current_status_line ? `<div style="margin-top:8px;font-size:12px;color:#6b7280;font-style:italic;">${escapeHtml(run.current_status_line)}</div>` : ''}
+        ${run.last_error ? `<div style="margin-top:8px;font-size:12px;color:#dc2626;">Error: ${escapeHtml(run.last_error)}</div>` : ''}
+    `;
+}
+
+async function runIngestionNow() {
+    const btn = document.getElementById('btnRunIngest');
+    if (btn) { btn.disabled = true; btn.textContent = 'Starting...'; }
+    try {
+        const res = await fetch('/api/ai/ingestion/runs', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to start');
+        settingsToast('Ingestion started', 'success');
+        _ingestCurrentRunId = data.run_id;
+        refreshIngestionStatus();
+    } catch (e) {
+        settingsToast('Start failed: ' + e.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Run Now'; }
+    }
+}
+
+async function cancelIngestionRun(runId) {
+    if (!confirm('Cancel this ingestion run?')) return;
+    try {
+        await fetch('/api/ai/ingestion/runs/' + runId + '/cancel', { method: 'POST', credentials: 'include' });
+        settingsToast('Cancel requested — finishing current thread...', 'info');
+    } catch (e) { settingsToast('Cancel failed: ' + e.message, 'error'); }
+}
+
+async function openIngestionFilters() {
+    let cfg = {};
+    try {
+        const res = await fetch('/api/ai/ingestion/config', { credentials: 'include' });
+        cfg = await res.json();
+    } catch (e) { settingsToast('Failed to load filters', 'error'); return; }
+
+    const listField = (val) => Array.isArray(val) ? val.join(', ') : (val || '');
+
+    const modal = document.createElement('div');
+    modal.id = 'ingestFiltersModal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:300;display:flex;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+        <div style="background:#fff;border-radius:12px;padding:20px;max-width:640px;width:92%;max-height:86vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                <h3 style="margin:0;font-size:16px;">Ingestion Filters</h3>
+                <button onclick="document.getElementById('ingestFiltersModal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;">&times;</button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;">
+                <label>Mailbox email<input id="f_mailbox" value="${escapeHtml(cfg.mailbox_email || '')}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>
+                <label>Date range (days back)<input id="f_days" type="number" value="${cfg.date_range_days || 90}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>
+                <label>Min thread messages<input id="f_minmsg" type="number" value="${cfg.min_thread_messages || 2}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>
+                <label>Min reply chars<input id="f_minchars" type="number" value="${cfg.min_reply_chars || 100}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>
+                <label>Max threads/run<input id="f_maxthreads" type="number" value="${cfg.max_threads_per_run || 500}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>
+                <label style="display:flex;align-items:center;gap:6px;margin-top:18px;"><input id="f_skipai" type="checkbox" ${cfg.skip_ai_drafted ? 'checked' : ''}> Skip AI-drafted replies</label>
+                <label style="grid-column:1/-1;">Rep whitelist (comma-separated emails, blank = all)<input id="f_reps" value="${escapeHtml(listField(cfg.rep_whitelist))}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>
+                <label style="grid-column:1/-1;">Excluded domains (comma)<input id="f_excdom" value="${escapeHtml(listField(cfg.excluded_domains))}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>
+                <label style="grid-column:1/-1;">Subject — must include (comma, any match)<input id="f_subinc" value="${escapeHtml(listField(cfg.subject_include_keywords))}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>
+                <label style="grid-column:1/-1;">Subject — exclude (comma)<input id="f_subexc" value="${escapeHtml(listField(cfg.subject_exclude_keywords))}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>
+                <label style="grid-column:1/-1;">Body — must include (comma)<input id="f_bodyinc" value="${escapeHtml(listField(cfg.body_include_keywords))}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>
+                <label style="grid-column:1/-1;">Body — exclude (comma)<input id="f_bodyexc" value="${escapeHtml(listField(cfg.body_exclude_keywords))}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:4px;"></label>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+                <button onclick="document.getElementById('ingestFiltersModal').remove()" style="padding:8px 16px;background:#fff;color:#6b7280;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;">Cancel</button>
+                <button onclick="saveIngestionFilters()" style="padding:8px 16px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;">Save</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+}
+
+function _parseList(str) {
+    return (str || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+
+async function saveIngestionFilters() {
+    const payload = {
+        mailbox_email: document.getElementById('f_mailbox').value.trim(),
+        date_range_days: parseInt(document.getElementById('f_days').value) || 90,
+        min_thread_messages: parseInt(document.getElementById('f_minmsg').value) || 2,
+        min_reply_chars: parseInt(document.getElementById('f_minchars').value) || 100,
+        max_threads_per_run: parseInt(document.getElementById('f_maxthreads').value) || 500,
+        skip_ai_drafted: document.getElementById('f_skipai').checked,
+        rep_whitelist: _parseList(document.getElementById('f_reps').value),
+        excluded_domains: _parseList(document.getElementById('f_excdom').value),
+        subject_include_keywords: _parseList(document.getElementById('f_subinc').value),
+        subject_exclude_keywords: _parseList(document.getElementById('f_subexc').value),
+        body_include_keywords: _parseList(document.getElementById('f_bodyinc').value),
+        body_exclude_keywords: _parseList(document.getElementById('f_bodyexc').value),
+    };
+    try {
+        const res = await fetch('/api/ai/ingestion/config', {
+            method: 'PUT', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('save failed');
+        settingsToast('Filters saved', 'success');
+        const m = document.getElementById('ingestFiltersModal'); if (m) m.remove();
+    } catch (e) { settingsToast('Save failed: ' + e.message, 'error'); }
 }
 
 async function saveAiGlobalMode(mode) {
