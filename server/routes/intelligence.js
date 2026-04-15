@@ -245,4 +245,71 @@ router.post('/training-candidates/:id/review', ...mgr, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/* ===========================================================================
+ * Customer Intelligence — type-ahead + 360 profile
+ * ======================================================================== */
+
+const customerIntel = require('../services/customer-intel');
+
+// In-memory cache for next-best-action AI calls (keyed by type|key)
+// 10-min TTL keeps the panel snappy on repeated lookups + caps Gemini cost
+const _cust_aicache = new Map();
+function _cust_cacheGet(k) {
+  const v = _cust_aicache.get(k);
+  if (v && (Date.now() - v.t) < 10 * 60 * 1000) return v.data;
+  return null;
+}
+function _cust_cacheSet(k, data) {
+  _cust_aicache.set(k, { t: Date.now(), data });
+  // Cap cache size
+  if (_cust_aicache.size > 200) {
+    const first = _cust_aicache.keys().next().value;
+    _cust_aicache.delete(first);
+  }
+}
+
+// GET /api/intel/customer/search?q=acme&limit=12
+router.get('/customer/search', ...mgr, async (req, res) => {
+  try {
+    const q = (req.query.q || '').toString();
+    const limit = Math.min(parseInt(req.query.limit) || 12, 30);
+    const results = await customerIntel.searchCandidates({ q, limit });
+    res.json({ q, results });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/intel/customer/profile?type=domain&key=acme.com[&with_ai=1]
+router.get('/customer/profile', ...mgr, async (req, res) => {
+  try {
+    const { type, key } = req.query;
+    if (!type || !key) return res.status(400).json({ error: 'type and key required' });
+    const profile = await customerIntel.getProfile({ type, key: String(key) });
+    if (!profile.found) return res.json(profile);
+
+    if (req.query.with_ai === '1') {
+      const cacheKey = `${type}|${String(key).toLowerCase()}`;
+      let ai = _cust_cacheGet(cacheKey);
+      if (!ai) {
+        ai = await customerIntel.generateNextBestAction(profile);
+        _cust_cacheSet(cacheKey, ai);
+      }
+      profile.ai = ai;
+    }
+    res.json(profile);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/intel/customer/refresh-ai — force a fresh next-best-action regen
+router.post('/customer/refresh-ai', ...mgr, async (req, res) => {
+  try {
+    const { type, key } = req.body || {};
+    if (!type || !key) return res.status(400).json({ error: 'type and key required' });
+    const profile = await customerIntel.getProfile({ type, key });
+    if (!profile.found) return res.json(profile);
+    const ai = await customerIntel.generateNextBestAction(profile);
+    _cust_cacheSet(`${type}|${String(key).toLowerCase()}`, ai);
+    res.json({ ai });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

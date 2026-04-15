@@ -13437,6 +13437,7 @@ async function loadCommandCenter() {
     ccLoadAnomalies();   // lazy
     ccLoadConfig();      // SLA threshold + snoozes
     ccArchiveLoadStatus(); // archive tiles + progress bar
+    ccLiveTickerStart();   // 📡 Live ticker — auto-refreshes every 30s
     ccIntelStatsLoad();
     ccAttentionLoad();
     ccQualityLoad();
@@ -13558,9 +13559,143 @@ function ccShellHtml() {
             .cc-sort:hover{ color:#0f172a }
             .cc-sort .arrow{ opacity:.35; margin-left:4px }
             .cc-sort.active .arrow{ opacity:1; color:#6366f1 }
+
+            /* Zone headers */
+            .cc-zone-header{
+                display:flex; align-items:center; gap:10px;
+                font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.08em;
+                color:#475569; margin:24px 4px 10px 4px;
+            }
+            .cc-zone-header.first { margin-top:8px; }
+            .cc-zone-header .pip{ width:8px; height:8px; border-radius:50%; background:#6366f1; }
+            .cc-zone-header.today .pip{ background:#ef4444; box-shadow:0 0 0 4px rgba(239,68,68,.15); }
+            .cc-zone-header.week  .pip{ background:#6366f1; box-shadow:0 0 0 4px rgba(99,102,241,.15); }
+            .cc-zone-header.live  .pip{ background:#10b981; box-shadow:0 0 0 4px rgba(16,185,129,.15); animation:ccPulse 1.4s ease-in-out infinite; }
+
+            /* Customer 360 search */
+            .c360-search-wrap{
+                background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);
+                border-radius:18px; padding:20px 22px; margin-bottom:18px;
+                box-shadow:0 14px 32px rgba(15,23,42,.2), inset 0 1px 0 rgba(255,255,255,.05);
+                color:#fff; position:relative;
+            }
+            .c360-search-wrap .lbl{ font-size:11px; text-transform:uppercase; letter-spacing:.1em; opacity:.75; margin-bottom:8px }
+            .c360-search-input{
+                width:100%; box-sizing:border-box; padding:14px 18px; font-size:16px;
+                background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12);
+                border-radius:12px; color:#fff; outline:none;
+                transition:border-color .15s, background .15s;
+            }
+            .c360-search-input:focus{ border-color:#818cf8; background:rgba(255,255,255,.12) }
+            .c360-search-input::placeholder{ color:rgba(255,255,255,.45) }
+            .c360-suggest{
+                position:absolute; left:22px; right:22px; top:88px; z-index:30;
+                background:#fff; color:#0f172a; border-radius:12px; max-height:340px;
+                overflow-y:auto; box-shadow:0 18px 40px rgba(15,23,42,.25);
+                display:none;
+            }
+            .c360-suggest.open{ display:block }
+            .c360-sug-item{
+                padding:10px 14px; cursor:pointer; border-bottom:1px solid #f1f5f9;
+                display:flex; justify-content:space-between; gap:10px; align-items:center;
+            }
+            .c360-sug-item:hover, .c360-sug-item.focused{ background:#eef2ff }
+            .c360-sug-type{
+                font-size:10px; padding:2px 6px; border-radius:5px;
+                background:#e0e7ff; color:#4338ca; font-weight:700; text-transform:uppercase;
+            }
+            .c360-sug-type.email{ background:#fef3c7; color:#92400e }
+            .c360-sug-type.person{ background:#dcfce7; color:#166534 }
+            .c360-sug-type.subject{ background:#fce7f3; color:#9f1239 }
+
+            /* Customer 360 result panel */
+            .c360-panel{
+                background:#fff; border-radius:18px; padding:20px;
+                border:1px solid #e2e8f0;
+                box-shadow:0 8px 24px rgba(15,23,42,.06);
+                margin-bottom:18px;
+            }
+            .c360-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px }
+            .c360-card{
+                background:#fff; border-radius:14px; padding:16px;
+                border:1px solid #e2e8f0;
+                box-shadow:0 1px 2px rgba(15,23,42,.04);
+            }
+            .c360-card h4{ margin:0 0 10px 0; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:#475569 }
+            .c360-risk-meter{
+                display:flex; align-items:center; gap:14px; padding:14px;
+                border-radius:12px; background:#f8fafc; border:1px solid #e2e8f0;
+            }
+            .c360-risk-circle{
+                width:74px; height:74px; border-radius:50%;
+                display:flex; align-items:center; justify-content:center;
+                font-weight:800; font-size:22px; color:#fff; flex-shrink:0;
+                box-shadow:0 8px 20px rgba(15,23,42,.18), inset 0 1px 0 rgba(255,255,255,.4);
+            }
+            .c360-tl-row{
+                display:flex; gap:10px; padding:10px 12px; cursor:pointer;
+                border:1px solid #e2e8f0; border-radius:10px; margin-bottom:6px;
+                background:#fff; transition:all .15s;
+            }
+            .c360-tl-row:hover{ border-color:#6366f1; background:#eef2ff }
+            .c360-tl-row.complaint{ border-left:3px solid #dc2626 }
+            .c360-tl-row.damage{ border-left:3px solid #f59e0b }
+            .c360-kw{ display:inline-block; background:#eef2ff; color:#4338ca; padding:4px 10px; border-radius:8px; font-size:12px; margin:3px 4px 3px 0; font-weight:600 }
+            .c360-kw.lg{ font-size:14px; padding:6px 12px }
+            .c360-rep-row{
+                display:flex; justify-content:space-between; align-items:center;
+                padding:8px 10px; border-bottom:1px solid #f1f5f9; font-size:13px;
+            }
+            .c360-rep-row:last-child{ border-bottom:none }
+            .c360-rep-quality{
+                display:inline-block; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:700;
+            }
+
+            /* LIVE ticker */
+            .cc-live-ticker{
+                display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+                gap:10px; margin-bottom:18px;
+            }
+            .cc-live-tile{
+                background:linear-gradient(135deg,#064e3b 0%,#065f46 100%);
+                color:#fff; border-radius:14px; padding:12px 14px;
+                box-shadow:0 8px 20px rgba(6,95,70,.22), inset 0 1px 0 rgba(255,255,255,.1);
+                position:relative; overflow:hidden;
+            }
+            .cc-live-tile::before{
+                content:''; position:absolute; top:8px; right:10px;
+                width:6px; height:6px; border-radius:50%; background:#34d399;
+                animation:ccPulse 1.4s ease-in-out infinite;
+            }
+            .cc-live-tile.warn{ background:linear-gradient(135deg,#7c2d12 0%,#9a3412 100%); box-shadow:0 8px 20px rgba(154,52,18,.22), inset 0 1px 0 rgba(255,255,255,.1) }
+            .cc-live-tile.warn::before{ background:#fb923c }
+            .cc-live-tile.crit{ background:linear-gradient(135deg,#7f1d1d 0%,#991b1b 100%); box-shadow:0 8px 20px rgba(153,27,27,.3), inset 0 1px 0 rgba(255,255,255,.1) }
+            .cc-live-tile.crit::before{ background:#f87171 }
+            .cc-live-tile .lbl{ font-size:10px; text-transform:uppercase; letter-spacing:.08em; opacity:.85 }
+            .cc-live-tile .val{ font-size:24px; font-weight:800; margin-top:3px; line-height:1 }
+            .cc-live-tile .sub{ font-size:11px; opacity:.85; margin-top:4px }
         </style>
 
-        <!-- ============== Quick stat strip (intelligence summary) ============== -->
+        <!-- ============== 🔍 Customer 360 search ============== -->
+        <div class="c360-search-wrap" id="c360SearchWrap">
+            <div class="lbl">🔍 Customer 360 Lookup</div>
+            <input type="text" id="c360Search" class="c360-search-input"
+                placeholder="Type a company name, domain, email, person, or order ref…"
+                autocomplete="off" oninput="c360OnInput(event)" onkeydown="c360OnKey(event)" />
+            <div id="c360Suggest" class="c360-suggest"></div>
+        </div>
+        <div id="c360PanelHost"></div>
+
+        <!-- ============== 📡 LIVE zone ============== -->
+        <div class="cc-zone-header live first"><span class="pip"></span><span>📡 Live · auto-refresh every 30s</span></div>
+        <div id="ccLiveTicker" class="cc-live-ticker">
+            <div class="cc-live-tile"><div class="lbl">Loading…</div><div class="val">—</div></div>
+        </div>
+
+        <!-- ============== 🔥 TODAY zone ============== -->
+        <div class="cc-zone-header today"><span class="pip"></span><span>🔥 Today · firefights & immediate action</span></div>
+
+        <!-- Quick stat strip (intelligence summary) -->
         <div id="ccIntelStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px"></div>
 
         <!-- ============== Manager Attention Center (top of CC) ============== -->
@@ -13667,6 +13802,9 @@ function ccShellHtml() {
             </div>
             <div id="ccNotesList"></div>
         </div>
+
+        <!-- ============== 📊 THIS WEEK zone ============== -->
+        <div class="cc-zone-header week"><span class="pip"></span><span>📊 This week · trends, scoring & deep analytics</span></div>
 
         <!-- ============== Reply quality scorecard ============== -->
         <div class="cc-section cc-3d" id="ccQualitySection">
@@ -14067,7 +14205,10 @@ function ccRenderDistribution(data) {
         el.innerHTML = `<div style="padding:24px 20px;color:#64748b;font-size:13px;line-height:1.5">
             <div style="font-weight:600;color:#0f172a;margin-bottom:6px">Distribution not in this run</div>
             Re-run the metrics analysis to populate response-time buckets.
-            <div style="margin-top:10px"><button class="cc-btn sm" onclick="switchTab('settings'); setTimeout(()=>{try{showSettingsSection(\'ai\')}catch(e){}},200)">Open AI Settings →</button></div>
+            <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+                <button class="cc-btn sm" onclick="ccStartMetricsRun()">▶ Run analysis now</button>
+                <button class="cc-btn ghost sm" onclick="currentSettingsTab='ai'; switchTab('settings');">Open AI Settings →</button>
+            </div>
         </div>`;
         return;
     }
@@ -14099,7 +14240,10 @@ function ccRenderBusy(data) {
         el.innerHTML = `<div style="padding:24px 20px;color:#64748b;font-size:13px;line-height:1.5">
             <div style="font-weight:600;color:#0f172a;margin-bottom:6px">Hourly breakdown not in this run</div>
             Re-run the metrics analysis to populate the hour-by-hour volume chart.
-            <div style="margin-top:10px"><button class="cc-btn sm" onclick="switchTab('settings'); setTimeout(()=>{try{showSettingsSection(\'ai\')}catch(e){}},200)">Open AI Settings →</button></div>
+            <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+                <button class="cc-btn sm" onclick="ccStartMetricsRun()">▶ Run analysis now</button>
+                <button class="cc-btn ghost sm" onclick="currentSettingsTab='ai'; switchTab('settings');">Open AI Settings →</button>
+            </div>
         </div>`;
         return;
     }
@@ -14513,6 +14657,41 @@ async function ccSendReportCard(emailEnc) {
 }
 
 // ----- Patterns + Anomalies -----
+
+// Trigger a fresh metrics analysis run (was wired to broken Open AI Settings link)
+async function ccStartMetricsRun() {
+    if (!confirm('Start a fresh metrics analysis run?\n\nThis takes 1–3 minutes and will populate the response-time and hourly-volume charts.')) return;
+    try {
+        const r = await fetch('/api/ai/metrics/runs', {
+            method: 'POST', credentials: 'include',
+            headers: {'Content-Type':'application/json'}, body: '{}',
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'failed');
+        alert('Metrics run started (id ' + (data.run_id || '?') + ').\n\nRefresh in a few minutes to see the new charts.');
+    } catch (e) {
+        alert('Could not start metrics run: ' + e.message);
+    }
+}
+
+// Render a clickable thread reference list — each item opens the archive thread modal
+function ccRenderThreadRefs(threads) {
+    if (!Array.isArray(threads) || !threads.length) return '';
+    return `<div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
+        <div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Click to open:</div>
+        ${threads.slice(0, 8).map(t => `
+            <div onclick="ccArchiveOpenThread('${escapeHtml(t.gmail_thread_id||'')}')"
+                 style="cursor:pointer;background:#fff;border:1px solid #cbd5e1;border-radius:6px;padding:6px 10px;font-size:12px;color:#334155;display:flex;justify-content:space-between;gap:8px;align-items:center;transition:all .15s"
+                 onmouseover="this.style.borderColor='#4f46e5';this.style.background='#eef2ff'"
+                 onmouseout="this.style.borderColor='#cbd5e1';this.style.background='#fff'">
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📧 ${escapeHtml(t.thread_subject || '(no subject)')}</span>
+                <span style="font-size:11px;color:#64748b;white-space:nowrap">${escapeHtml((t.customer_email||'').split('@')[0] || '')} →</span>
+            </div>
+        `).join('')}
+        ${threads.length > 8 ? `<div style="font-size:11px;color:#94a3b8">+ ${threads.length - 8} more</div>` : ''}
+    </div>`;
+}
+
 async function ccLoadPatterns() {
     const t = document.getElementById('ccPatterns');
     if (!t) return;
@@ -14528,11 +14707,82 @@ async function ccLoadPatterns() {
             return;
         }
         t.innerHTML = `
-        ${repeats.length ? `<div style="margin-bottom:14px"><strong style="font-size:12px;color:#4f46e5">REPEAT QUESTIONS</strong>` + repeats.map(r => `<div style="background:#eef2ff;border-radius:10px;padding:10px 12px;margin-top:6px;font-size:13px"><strong>${escapeHtml(r.theme)}</strong> <span style="color:#64748b">(${r.count || r.example_subjects?.length || 0})</span><div style="color:#475569;margin-top:4px">💡 ${escapeHtml(r.suggested_canned_reply_topic || '')}</div></div>`).join('') + '</div>' : ''}
-        ${trending.length ? `<div><strong style="font-size:12px;color:#ec4899">TRENDING</strong>` + trending.map(t => `<div style="background:#fdf2f8;border-radius:10px;padding:10px 12px;margin-top:6px;font-size:13px"><strong>${escapeHtml(t.keyword)}</strong><div style="color:#475569;margin-top:4px">${escapeHtml(t.why_it_matters || '')}</div></div>`).join('') + '</div>' : ''}
+        ${repeats.length ? `<div style="margin-bottom:14px"><strong style="font-size:12px;color:#4f46e5">REPEAT QUESTIONS</strong>` + repeats.map(r => `
+            <div style="background:#eef2ff;border-radius:10px;padding:10px 12px;margin-top:6px;font-size:13px">
+                <strong>${escapeHtml(r.theme)}</strong> <span style="color:#64748b">(${r.count || (r.threads||[]).length || r.example_subjects?.length || 0})</span>
+                <div style="color:#475569;margin-top:4px">💡 ${escapeHtml(r.suggested_canned_reply_topic || '')}</div>
+                ${ccRenderThreadRefs(r.threads)}
+            </div>`).join('') + '</div>' : ''}
+        ${trending.length ? `<div><strong style="font-size:12px;color:#ec4899">TRENDING</strong>` + trending.map(t => `
+            <div style="background:#fdf2f8;border-radius:10px;padding:10px 12px;margin-top:6px;font-size:13px">
+                <strong>${escapeHtml(t.keyword)}</strong>
+                <div style="color:#475569;margin-top:4px">${escapeHtml(t.why_it_matters || '')}</div>
+                ${ccRenderThreadRefs(t.threads)}
+            </div>`).join('') + '</div>' : ''}
         `;
     } catch (err) {
         t.innerHTML = '<div style="color:#dc2626;font-size:13px">Pattern analysis failed: ' + err.message + '</div>';
+    }
+}
+
+// Map an anomaly title/category to an attention-item filter so we can show
+// a list of the actual threads that contributed to the anomaly.
+function ccAnomalyToAttentionFilter(a) {
+    const t = ((a.title || '') + ' ' + (a.what || '')).toLowerCase();
+    if (t.includes('sla') || t.includes('breach') || t.includes('unanswered') || t.includes('response time')) {
+        return { item_type: 'sla_breach', label: 'unanswered / SLA breach' };
+    }
+    if (t.includes('complaint') || t.includes('negative') || t.includes('angry') || t.includes('sentiment')) {
+        return { item_type: 'complaint', label: 'complaint' };
+    }
+    if (t.includes('damage') || t.includes('escalat') || t.includes('manager')) {
+        return { item_type: 'escalation', label: 'escalation' };
+    }
+    return { item_type: null, label: 'all open' };
+}
+
+async function ccShowAnomalyThreads(anomalyJson) {
+    const a = JSON.parse(decodeURIComponent(anomalyJson));
+    const filter = ccAnomalyToAttentionFilter(a);
+    const modal = document.getElementById('ccModal');
+    const titleEl = document.getElementById('ccModalTitle');
+    const bodyEl = document.getElementById('ccModalBody');
+    titleEl.textContent = 'Threads behind: ' + (a.title || 'anomaly');
+    bodyEl.innerHTML = '<div class="cc-skeleton" style="height:80px"></div>';
+    modal.classList.add('open');
+    modal.style.display = 'flex';
+    try {
+        const params = new URLSearchParams({ limit: '50' });
+        if (filter.item_type) params.set('item_type', filter.item_type);
+        const r = await fetch('/api/intel/attention?' + params.toString(), { credentials:'include' });
+        const data = await r.json();
+        const items = data.items || [];
+        if (!items.length) {
+            bodyEl.innerHTML = `<div style="color:#64748b;padding:20px;text-align:center">
+                <div style="margin-bottom:8px">No open ${escapeHtml(filter.label)} items found.</div>
+                <div style="font-size:12px">Try running detectors: <button class="cc-btn sm" onclick="ccAttentionRunDetectors();this.parentNode.parentNode.innerHTML='Detectors started — close and reopen in ~30s'">Run detectors</button></div>
+            </div>`;
+            return;
+        }
+        bodyEl.innerHTML = `
+            <div style="font-size:12px;color:#64748b;margin-bottom:10px">
+                Showing ${items.length} open ${escapeHtml(filter.label)} item${items.length===1?'':'s'}. Click any row to open the full email thread.
+            </div>
+            ${items.map(it => `
+                <div onclick="ccArchiveOpenThread('${escapeHtml(it.gmail_thread_id||'')}')"
+                     style="cursor:pointer;border:1px solid #e2e8f0;border-left:4px solid ${ccSevColor ? ccSevColor(it.severity) : '#f59e0b'};border-radius:8px;padding:10px 12px;margin-bottom:6px;background:#fff;transition:all .15s"
+                     onmouseover="this.style.background='#f8fafc';this.style.borderColor='#4f46e5'"
+                     onmouseout="this.style.background='#fff';this.style.borderColor='#e2e8f0'">
+                    <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+                        <div style="font-weight:600;font-size:13px;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(it.title || '(untitled)')}</div>
+                        <div style="font-size:11px;color:#94a3b8;white-space:nowrap">${escapeHtml(it.severity || '')}</div>
+                    </div>
+                    <div style="font-size:12px;color:#64748b;margin-top:3px">${escapeHtml(it.customer_email || '')} · ${escapeHtml(it.mailbox_email || '')}</div>
+                    ${it.snippet ? `<div style="font-size:12px;color:#475569;margin-top:6px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${escapeHtml(it.snippet)}</div>` : ''}
+                </div>
+            `).join('')}`;
+    } catch (e) {
+        bodyEl.innerHTML = `<div style="color:#dc2626;padding:12px">Failed to load: ${escapeHtml(e.message)}</div>`;
     }
 }
 
@@ -14549,13 +14799,19 @@ async function ccLoadAnomalies() {
             t.innerHTML = '<div style="color:#059669;font-size:13px;padding:12px">✓ All metrics within expected ranges.</div>';
             return;
         }
-        t.innerHTML = list.map(a => `
+        t.innerHTML = list.map(a => {
+            const aJson = encodeURIComponent(JSON.stringify({title:a.title, what:a.what, severity:a.severity}));
+            const filter = ccAnomalyToAttentionFilter(a);
+            return `
             <div class="cc-anomaly severity-${a.severity || 'medium'}">
                 <div class="cc-anomaly-title">${escapeHtml(a.title)}</div>
                 <div style="font-size:13px;color:#1e293b">${escapeHtml(a.what || '')}</div>
                 ${a.hypothesis ? `<div class="cc-anomaly-hypothesis">💭 ${escapeHtml(a.hypothesis)}</div>` : ''}
-            </div>
-        `).join('');
+                <div style="margin-top:8px">
+                    <button class="cc-btn ghost sm" onclick="ccShowAnomalyThreads('${aJson}')" style="font-size:11px">📧 View ${escapeHtml(filter.label)} threads →</button>
+                </div>
+            </div>`;
+        }).join('');
     } catch (err) {
         t.innerHTML = '<div style="color:#dc2626;font-size:13px">Anomaly analysis failed: ' + err.message + '</div>';
     }
@@ -15435,6 +15691,360 @@ function ccQualityRenderRadials() {
 }
 
 /* ---------------- Stat strip (top-of-CC) ---------------- */
+/* ===========================================================================
+ * Customer 360 — search-as-you-type, then drill into the customer profile
+ * ======================================================================== */
+
+let _c360 = {
+    searchTimer: null,
+    suggestions: [],
+    focusedIdx: -1,
+    currentSelection: null,
+};
+
+function c360OnInput(ev) {
+    const q = (ev.target.value || '').trim();
+    clearTimeout(_c360.searchTimer);
+    if (q.length < 2) {
+        c360CloseSuggest();
+        return;
+    }
+    _c360.searchTimer = setTimeout(() => c360DoSearch(q), 220);
+}
+
+async function c360DoSearch(q) {
+    try {
+        const r = await fetch('/api/intel/customer/search?q=' + encodeURIComponent(q), { credentials:'include' });
+        const data = await r.json();
+        _c360.suggestions = data.results || [];
+        _c360.focusedIdx = -1;
+        c360RenderSuggest();
+    } catch (e) { /* silent */ }
+}
+
+function c360RenderSuggest() {
+    const el = document.getElementById('c360Suggest');
+    if (!el) return;
+    if (!_c360.suggestions.length) {
+        el.innerHTML = '<div style="padding:14px;color:#64748b;font-size:13px;text-align:center">No matches. Try a different spelling, domain, or order ref.</div>';
+        el.classList.add('open');
+        return;
+    }
+    el.innerHTML = _c360.suggestions.map((s, i) => `
+        <div class="c360-sug-item ${i === _c360.focusedIdx ? 'focused' : ''}" onclick="c360Select(${i})">
+            <div style="overflow:hidden;flex:1">
+                <div style="font-weight:600;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ccEsc(s.label || '(unknown)')}</div>
+                <div style="font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ccEsc(s.sublabel || '')}</div>
+            </div>
+            <span class="c360-sug-type ${s.type}">${s.type}</span>
+        </div>
+    `).join('');
+    el.classList.add('open');
+}
+
+function c360CloseSuggest() {
+    const el = document.getElementById('c360Suggest');
+    if (el) el.classList.remove('open');
+}
+
+function c360OnKey(ev) {
+    if (!_c360.suggestions.length) return;
+    if (ev.key === 'ArrowDown') {
+        ev.preventDefault();
+        _c360.focusedIdx = Math.min(_c360.suggestions.length - 1, _c360.focusedIdx + 1);
+        c360RenderSuggest();
+    } else if (ev.key === 'ArrowUp') {
+        ev.preventDefault();
+        _c360.focusedIdx = Math.max(0, _c360.focusedIdx - 1);
+        c360RenderSuggest();
+    } else if (ev.key === 'Enter') {
+        ev.preventDefault();
+        c360Select(_c360.focusedIdx >= 0 ? _c360.focusedIdx : 0);
+    } else if (ev.key === 'Escape') {
+        c360CloseSuggest();
+    }
+}
+
+async function c360Select(idx) {
+    const s = _c360.suggestions[idx];
+    if (!s) return;
+    c360CloseSuggest();
+    _c360.currentSelection = s;
+    document.getElementById('c360Search').value = s.label;
+    await c360LoadProfile(s.type, s.key);
+}
+
+async function c360LoadProfile(type, key) {
+    const host = document.getElementById('c360PanelHost');
+    if (!host) return;
+    host.innerHTML = `
+        <div class="c360-panel">
+            <div class="cc-skeleton" style="height:120px"></div>
+        </div>`;
+    try {
+        const r = await fetch('/api/intel/customer/profile?type=' + encodeURIComponent(type) + '&key=' + encodeURIComponent(key) + '&with_ai=1', { credentials:'include' });
+        const p = await r.json();
+        if (!p.found) {
+            host.innerHTML = `<div class="c360-panel"><div style="text-align:center;color:#64748b;padding:20px">No archived emails found for that selection.</div></div>`;
+            return;
+        }
+        c360RenderProfile(p);
+    } catch (e) {
+        host.innerHTML = `<div class="c360-panel"><div style="color:#dc2626;padding:12px">Failed: ${ccEsc(e.message)}</div></div>`;
+    }
+}
+
+function c360FmtSecs(s) {
+    if (s == null) return 'n/a';
+    if (s < 60) return Math.round(s) + 's';
+    if (s < 3600) return Math.round(s/60) + 'm';
+    if (s < 86400) return (s/3600).toFixed(1) + 'h';
+    return Math.round(s/86400) + 'd';
+}
+
+function c360QualityColor(q) {
+    if (q == null) return '#94a3b8';
+    if (q >= 4) return '#059669';
+    if (q >= 3) return '#f59e0b';
+    return '#dc2626';
+}
+
+function c360RenderProfile(p) {
+    const host = document.getElementById('c360PanelHost');
+    const id = p.identity, h = p.health, r = p.response;
+    const ai = p.ai || {};
+
+    // Render keywords as bar chart
+    const maxKw = Math.max(1, ...(p.keywords || []).map(k => k.volume));
+    const keywordsHtml = (p.keywords || []).slice(0, 15).map(k => {
+        const w = Math.max(8, Math.round((k.volume / maxKw) * 100));
+        return `<div style="margin-bottom:5px">
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px">
+                <span style="color:#334155;font-weight:600">${ccEsc(k.kw)}</span>
+                <span style="color:#64748b">${k.volume}</span>
+            </div>
+            <div style="height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden">
+                <div style="height:100%;width:${w}%;background:linear-gradient(90deg,#6366f1,#a855f7);border-radius:3px"></div>
+            </div>
+        </div>`;
+    }).join('') || '<div style="color:#94a3b8;font-size:13px">No keywords yet — classifier hasn\'t processed these emails.</div>';
+
+    // Question types as pills
+    const qtypesHtml = (p.question_types || []).slice(0, 10).map(q =>
+        `<span class="c360-kw lg">${ccEsc(q.type)} <span style="opacity:.7">${q.volume}</span></span>`
+    ).join('') || '<span style="color:#94a3b8;font-size:13px">No classified question types yet.</span>';
+
+    // Timeline rows
+    const timelineHtml = (p.timeline || []).slice(0, 30).map(t => {
+        const cls = t.has_complaint ? 'complaint' : (t.has_damage_claim ? 'damage' : '');
+        const date = t.last_msg_at ? new Date(t.last_msg_at).toLocaleDateString() : '';
+        const dirIcon = t.latest_direction === 'outbound' ? '↗' : (t.latest_direction === 'inbound' ? '↘' : '·');
+        const flag = t.has_complaint ? ' 🚩' : (t.has_damage_claim ? ' ⚠️' : '');
+        return `<div class="c360-tl-row ${cls}" onclick="ccArchiveOpenThread('${ccEsc(t.gmail_thread_id || '')}')">
+            <div style="font-size:11px;color:#64748b;width:74px;flex-shrink:0;padding-top:2px">${date}</div>
+            <div style="flex:1;overflow:hidden">
+                <div style="font-weight:600;font-size:13px;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${dirIcon} ${ccEsc(t.subject || '(no subject)')}${flag}</div>
+                <div style="font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">${ccEsc((t.latest_snippet||'').slice(0,140))}</div>
+            </div>
+            <div style="font-size:11px;color:#94a3b8;text-align:right;flex-shrink:0">${t.message_count || 0} msg${t.has_attachment ? ' 📎' : ''}</div>
+        </div>`;
+    }).join('') || '<div style="color:#94a3b8;font-size:13px">No threads found.</div>';
+
+    // Reps
+    const repsHtml = (p.reps || []).map(rep => {
+        const q = rep.avg_quality;
+        const c = c360QualityColor(q);
+        return `<div class="c360-rep-row">
+            <div style="overflow:hidden;flex:1">
+                <div style="font-weight:600;color:#0f172a">${ccEsc(rep.rep_name || rep.rep_email || '?')}</div>
+                <div style="font-size:11px;color:#64748b">${rep.reply_count} replies · ${rep.thread_count} threads · last ${rep.last_reply_at ? new Date(rep.last_reply_at).toLocaleDateString() : '?'}</div>
+            </div>
+            ${q != null ? `<span class="c360-rep-quality" style="background:${c}22;color:${c}">${q.toFixed(2)}/5</span>` : `<span class="c360-rep-quality" style="background:#f1f5f9;color:#94a3b8">ungraded</span>`}
+        </div>`;
+    }).join('') || '<div style="color:#94a3b8;font-size:13px">No outbound replies tracked.</div>';
+
+    // Open attention
+    const attentionHtml = (p.open_attention || []).slice(0, 6).map(a => `
+        <div onclick="ccArchiveOpenThread('${ccEsc(a.gmail_thread_id || '')}')" style="cursor:pointer;border-left:3px solid ${ccSevColor(a.severity)};padding:8px 10px;margin-bottom:4px;background:#fff7ed;border-radius:0 8px 8px 0;font-size:12px">
+            <div style="font-weight:700;color:#9a3412">${ccEsc(a.title || '')}</div>
+            ${a.snippet ? `<div style="color:#475569;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ccEsc(a.snippet.slice(0,160))}</div>` : ''}
+        </div>
+    `).join('');
+
+    host.innerHTML = `
+        <div class="c360-panel">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+                <div>
+                    <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;font-weight:700">Customer 360</div>
+                    <div style="font-size:24px;font-weight:800;color:#0f172a;margin-top:2px">${ccEsc(id.label)}</div>
+                    <div style="font-size:12px;color:#64748b;margin-top:4px">
+                        ${id.total_threads} threads · ${id.total_messages} messages · ${id.inbound_count} in / ${id.outbound_count} out
+                        ${id.first_contact ? ` · since ${new Date(id.first_contact).toLocaleDateString()}` : ''}
+                        ${id.days_since_contact != null ? ` · last contact ${id.days_since_contact === 0 ? 'today' : id.days_since_contact + 'd ago'}` : ''}
+                    </div>
+                </div>
+                <div style="display:flex;gap:6px">
+                    <button class="cc-btn ghost sm" onclick="c360RefreshAi()">↻ Refresh AI</button>
+                    <button class="cc-btn ghost sm" onclick="c360Close()">✕ Close</button>
+                </div>
+            </div>
+
+            <!-- Card 1: Health & Risk + Next best action -->
+            <div class="c360-card" style="margin-bottom:14px;background:linear-gradient(135deg,#fff,#f8fafc)">
+                <h4>Health & risk</h4>
+                <div class="c360-risk-meter">
+                    <div class="c360-risk-circle" style="background:linear-gradient(135deg,${h.color},${h.color}cc)">${h.score}</div>
+                    <div style="flex:1">
+                        <div style="font-weight:700;color:${h.color};text-transform:uppercase;font-size:13px;letter-spacing:.05em">${h.label} risk</div>
+                        <div style="font-size:12px;color:#64748b;margin-top:4px">
+                            ${h.complaints} complaint${h.complaints===1?'':'s'} · ${h.escalations} escalation${h.escalations===1?'':'s'} · ${h.damage_claims} damage claim${h.damage_claims===1?'':'s'}<br>
+                            Sentiment: ${h.sentiment_pct.positive}% 🙂 / ${h.sentiment_pct.neutral}% 😐 / ${h.sentiment_pct.negative}% 🙁
+                        </div>
+                    </div>
+                    <div style="text-align:right">
+                        <div style="font-size:11px;color:#64748b">Avg response</div>
+                        <div style="font-weight:700;color:#0f172a">${c360FmtSecs(r.avg_seconds)}</div>
+                        ${r.unanswered_count > 0 ? `<div style="font-size:11px;color:#dc2626;margin-top:2px">${r.unanswered_count} unanswered</div>` : ''}
+                    </div>
+                </div>
+                ${ai.next_best_action ? `
+                    <div style="margin-top:12px;padding:12px 14px;background:linear-gradient(135deg,#eef2ff,#e0e7ff);border-radius:10px;border-left:4px solid #6366f1">
+                        <div style="font-size:11px;color:#4338ca;font-weight:800;text-transform:uppercase;letter-spacing:.06em">🎯 Next best action</div>
+                        <div style="font-size:13.5px;color:#1e293b;margin-top:4px;line-height:1.5">${ccEsc(ai.next_best_action)}</div>
+                        ${ai.watchouts ? `<div style="font-size:12px;color:#64748b;margin-top:6px;border-top:1px dashed #c7d2fe;padding-top:6px"><b>⚠️ Watchouts:</b> ${ccEsc(ai.watchouts)}</div>` : ''}
+                    </div>
+                ` : '<div style="margin-top:10px;font-size:12px;color:#94a3b8">AI summary loading…</div>'}
+                ${attentionHtml ? `<div style="margin-top:12px"><div style="font-size:12px;font-weight:700;color:#9a3412;margin-bottom:6px">⚠ Open attention items</div>${attentionHtml}</div>` : ''}
+            </div>
+
+            <!-- 3-card grid below: keywords / timeline / reps -->
+            <div class="c360-grid">
+                <div class="c360-card">
+                    <h4>Top keywords & topics</h4>
+                    ${keywordsHtml}
+                    <div style="margin-top:12px;border-top:1px dashed #e2e8f0;padding-top:10px">
+                        <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;margin-bottom:6px">Question types</div>
+                        ${qtypesHtml}
+                    </div>
+                    ${(p.product_lines||[]).length ? `<div style="margin-top:12px;border-top:1px dashed #e2e8f0;padding-top:10px">
+                        <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;margin-bottom:6px">Product lines</div>
+                        ${(p.product_lines||[]).map(pl => `<span class="c360-kw">${ccEsc(pl.product)} <span style="opacity:.7">${pl.volume}</span></span>`).join('')}
+                    </div>` : ''}
+                </div>
+
+                <div class="c360-card" style="grid-column: span 2; min-width:0">
+                    <h4>Conversation timeline · click any row to open</h4>
+                    <div style="max-height:520px;overflow-y:auto;padding-right:4px">
+                        ${timelineHtml}
+                    </div>
+                </div>
+
+                <div class="c360-card" style="grid-column: 1 / -1">
+                    <h4>Rep relationships & response stats</h4>
+                    ${repsHtml}
+                </div>
+            </div>
+        </div>`;
+}
+
+async function c360RefreshAi() {
+    if (!_c360.currentSelection) return;
+    const s = _c360.currentSelection;
+    try {
+        const r = await fetch('/api/intel/customer/refresh-ai', {
+            method: 'POST', credentials: 'include',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ type: s.type, key: s.key })
+        });
+        if (!r.ok) throw new Error('refresh failed');
+        await c360LoadProfile(s.type, s.key);
+    } catch (e) { alert('Could not refresh AI: ' + e.message); }
+}
+
+function c360Close() {
+    document.getElementById('c360PanelHost').innerHTML = '';
+    document.getElementById('c360Search').value = '';
+    _c360.currentSelection = null;
+}
+
+// Click outside the suggest dropdown should close it
+document.addEventListener('click', (ev) => {
+    if (!ev.target.closest('#c360SearchWrap')) c360CloseSuggest();
+});
+
+/* ===========================================================================
+ * LIVE Ticker — 30s auto-refresh of real-time ops counters
+ * ======================================================================== */
+
+let _ccLiveTimer = null;
+
+async function ccLiveTickerLoad() {
+    const el = document.getElementById('ccLiveTicker');
+    if (!el) return;
+    try {
+        // Pull the data we need from existing endpoints to avoid new backend code
+        const [overviewR, attentionR] = await Promise.all([
+            fetch('/api/command-center/overview?range_hours=24', { credentials:'include' }),
+            fetch('/api/intel/attention?limit=200', { credentials:'include' }),
+        ]);
+        const overview = overviewR.ok ? await overviewR.json() : {};
+        const attentionData = attentionR.ok ? await attentionR.json() : { items: [] };
+        const items = attentionData.items || [];
+
+        // Open inbox count: SLA breaches + open attention items
+        const slaBreaches = items.filter(i => i.item_type === 'sla_breach').length;
+        const complaints = items.filter(i => i.item_type === 'complaint' || i.item_type === 'repeat_complaint').length;
+        const escalations = items.filter(i => i.item_type === 'escalation').length;
+
+        // Find oldest unanswered — items with item_type='sla_breach' tend to have detected_at
+        const slaItems = items.filter(i => i.item_type === 'sla_breach' && i.detected_at);
+        let oldestSecs = null, oldestSubj = '';
+        for (const it of slaItems) {
+            const age = (Date.now() - new Date(it.detected_at).getTime()) / 1000;
+            if (oldestSecs == null || age > oldestSecs) { oldestSecs = age; oldestSubj = it.title || ''; }
+        }
+        const oldestStr = oldestSecs == null ? '—' :
+            oldestSecs > 86400 ? Math.floor(oldestSecs/86400) + 'd' :
+            oldestSecs > 3600  ? Math.floor(oldestSecs/3600) + 'h' :
+            Math.floor(oldestSecs/60) + 'm';
+
+        // Today vs same-day-last-week from overview if present
+        const summary = overview.summary || {};
+        const todayVol = summary.total_threads || overview.total_threads || 0;
+        const prevVol  = (summary.previous_period && summary.previous_period.total_threads) || 0;
+        const delta = prevVol > 0 ? Math.round(((todayVol - prevVol) / prevVol) * 100) : null;
+        const deltaStr = delta == null ? '' : (delta >= 0 ? '+' + delta + '%' : delta + '%');
+        const volTone = delta == null ? '' : (Math.abs(delta) > 30 ? 'warn' : '');
+
+        const avgRespMs = summary.overall_first_response_avg_ms;
+        const avgRespStr = avgRespMs ? (avgRespMs > 3600000 ? (avgRespMs/3600000).toFixed(1) + 'h' : Math.round(avgRespMs/60000) + 'm') : '—';
+
+        const tile = (cls, lbl, val, sub) =>
+            `<div class="cc-live-tile ${cls||''}"><div class="lbl">${lbl}</div><div class="val">${val}</div><div class="sub">${sub||''}</div></div>`;
+
+        el.innerHTML = [
+            tile(slaBreaches > 5 ? 'crit' : slaBreaches > 0 ? 'warn' : '', 'Open SLA breaches', slaBreaches.toLocaleString(), 'click below to triage'),
+            tile(oldestSecs > 86400 ? 'crit' : oldestSecs > 14400 ? 'warn' : '', 'Oldest unanswered', oldestStr, oldestSubj.slice(0, 32) || 'all caught up'),
+            tile(complaints > 0 ? 'warn' : '', 'Open complaints', complaints.toLocaleString(), 'in attention queue'),
+            tile(escalations > 0 ? 'warn' : '', 'Escalations', escalations.toLocaleString(), 'asking for manager'),
+            tile(volTone, 'Volume vs LW', todayVol.toLocaleString(), deltaStr ? deltaStr + ' vs same day last week' : 'no comparison data'),
+            tile('', 'Avg response (24h)', avgRespStr, 'first reply time'),
+        ].join('');
+    } catch (e) {
+        el.innerHTML = '<div class="cc-live-tile warn"><div class="lbl">Live ticker</div><div class="val">—</div><div class="sub">' + ccEsc(e.message) + '</div></div>';
+    }
+}
+
+function ccLiveTickerStart() {
+    ccLiveTickerLoad();
+    if (_ccLiveTimer) clearInterval(_ccLiveTimer);
+    _ccLiveTimer = setInterval(() => {
+        // Only refresh while CC is the active tab
+        const ccEl = document.getElementById('commandCenterContainer');
+        if (ccEl && ccEl.classList.contains('active')) ccLiveTickerLoad();
+    }, 30000);
+}
+
 async function ccIntelStatsLoad() {
     const wrap = document.getElementById('ccIntelStats');
     if (!wrap) return;
