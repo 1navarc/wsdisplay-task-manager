@@ -106,6 +106,7 @@ app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/command-center', require('./routes/command-center'));
 app.use('/api/archive', require('./routes/archive'));
+app.use('/api/intel', require('./routes/intelligence'));
 
 // Gmail webhook
 app.post('/api/gmail/webhook', require('./routes/gmail-webhook'));
@@ -286,6 +287,36 @@ runMigrations(pool).then(async () => {
   } catch (err) {
     console.error('Email archive init (non-fatal):', err.message);
   }
+
+  // Email Intelligence: classifier + grader + attention + nightly suggesters
+  try {
+    const classifier = require('./services/email-classifier');
+    const grader = require('./services/rep-quality-grader');
+    const attention = require('./services/manager-attention');
+    const intel = require('./services/email-intelligence');
+
+    // Classifier every 5 minutes — picks up newly-archived inbound messages
+    cron.schedule('*/5 * * * *', () => {
+      classifier.cronTick().catch(e => console.warn('[classifier cron]', e.message));
+    });
+    // Quality grader every 5 minutes — grades newly-archived outbound rep replies
+    cron.schedule('*/5 * * * *', () => {
+      grader.cronTick().catch(e => console.warn('[grader cron]', e.message));
+    });
+    // Attention scanner every 15 minutes
+    cron.schedule('*/15 * * * *', () => {
+      attention.runAll().catch(e => console.warn('[attention cron]', e.message));
+    });
+    // Nightly FAQ + Training suggesters at 4am
+    cron.schedule('0 4 * * *', () => {
+      intel.runFaqSuggester({}).catch(e => console.warn('[faq cron]', e.message));
+      intel.runTrainingSuggester({}).catch(e => console.warn('[training cron]', e.message));
+    });
+    console.log('[intel] crons scheduled (classify/5m, grade/5m, attention/15m, suggest 04:00)');
+  } catch (err) {
+    console.error('Email intelligence init (non-fatal):', err.message);
+  }
+
   server.listen(PORT, () => console.log('WSDisplay Email API running on port ' + PORT));
 }).catch(err => {
   console.error('Failed to run migrations:', err);

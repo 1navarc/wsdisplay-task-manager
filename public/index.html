@@ -13437,6 +13437,12 @@ async function loadCommandCenter() {
     ccLoadAnomalies();   // lazy
     ccLoadConfig();      // SLA threshold + snoozes
     ccArchiveLoadStatus(); // archive tiles + progress bar
+    ccAttentionLoad();
+    ccQualityLoad();
+    ccTopQLoad();
+    ccHeatmapLoad();
+    ccFaqLoad();
+    ccTrainingLoad();
 }
 
 function ccShellHtml() {
@@ -13508,6 +13514,36 @@ function ccShellHtml() {
             <div id="ccArchiveBarRows" style="margin-top:10px;display:flex;flex-direction:column;gap:6px;font-size:12.5px"></div>
         </div>
         <style>@keyframes ccPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.4)}}</style>
+
+        <!-- ============== Manager Attention Center (top of CC) ============== -->
+        <div class="cc-section" id="ccAttentionSection" style="border-left:4px solid #ef4444">
+            <div class="cc-section-header">
+                <div>
+                    <div class="cc-section-title">🚨 Items needing your attention</div>
+                    <div class="cc-section-desc" id="ccAttentionDesc">Loading…</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <select id="ccAttentionFilter" onchange="ccAttentionLoad()" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
+                        <option value="">All types</option>
+                        <option value="complaint">Complaints</option>
+                        <option value="escalation">Escalations</option>
+                        <option value="repeat_complaint">Repeat complaints</option>
+                        <option value="damage_claim">Damage claims</option>
+                        <option value="sla_breach">SLA breaches</option>
+                        <option value="low_quality_reply">Low-quality replies</option>
+                    </select>
+                    <select id="ccAttentionSeverity" onchange="ccAttentionLoad()" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
+                        <option value="">All severities</option>
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                    <button class="cc-btn ghost sm" onclick="ccAttentionRunDetectors()">↻ Re-scan</button>
+                </div>
+            </div>
+            <div id="ccAttentionList"><div class="cc-skeleton" style="height:80px"></div></div>
+        </div>
 
         <!-- KPI row -->
         <div class="cc-kpi-row" id="ccKpiRow">
@@ -13582,6 +13618,103 @@ function ccShellHtml() {
                 </div>
             </div>
             <div id="ccNotesList"></div>
+        </div>
+
+        <!-- ============== Reply quality scorecard ============== -->
+        <div class="cc-section" id="ccQualitySection">
+            <div class="cc-section-header">
+                <div>
+                    <div class="cc-section-title">⭐ Reply quality by rep</div>
+                    <div class="cc-section-desc" id="ccQualityDesc">AI-graded score for every outbound reply (tone · completeness · accuracy · followthrough)</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                    <select id="ccQualityDays" onchange="ccQualityLoad()" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
+                        <option value="7">7 days</option>
+                        <option value="30" selected>30 days</option>
+                        <option value="90">90 days</option>
+                        <option value="365">12 months</option>
+                    </select>
+                    <button class="cc-btn ghost sm" onclick="ccQualityBackfillPrompt()">Grade backlog…</button>
+                </div>
+            </div>
+            <div id="ccQualityTable"><div class="cc-skeleton" style="height:80px"></div></div>
+        </div>
+
+        <!-- ============== Top customer questions ============== -->
+        <div class="cc-section" id="ccTopQSection">
+            <div class="cc-section-header">
+                <div>
+                    <div class="cc-section-title">📊 Top customer questions</div>
+                    <div class="cc-section-desc">By product line × question type — what people are emailing us about</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <select id="ccTopQDays" onchange="ccTopQLoad()" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
+                        <option value="7">7 days</option>
+                        <option value="30" selected>30 days</option>
+                        <option value="90">90 days</option>
+                        <option value="365">12 months</option>
+                    </select>
+                    <input type="text" id="ccTopQProduct" placeholder="filter product line…" oninput="ccTopQDebounced()" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;width:160px"/>
+                    <button class="cc-btn ghost sm" onclick="ccClassifierBackfillPrompt()">Classify backlog…</button>
+                </div>
+            </div>
+            <div id="ccTopQTable"><div class="cc-skeleton" style="height:80px"></div></div>
+        </div>
+
+        <!-- ============== Product × hour heatmap ============== -->
+        <div class="cc-section" id="ccHeatmapSection">
+            <div class="cc-section-header">
+                <div>
+                    <div class="cc-section-title">🌡️ Product × time-of-day heatmap</div>
+                    <div class="cc-section-desc">When customers ask about each product line</div>
+                </div>
+                <select id="ccHeatmapDays" onchange="ccHeatmapLoad()" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
+                    <option value="30" selected>30 days</option>
+                    <option value="90">90 days</option>
+                    <option value="365">12 months</option>
+                </select>
+            </div>
+            <div id="ccHeatmapWrap" style="overflow-x:auto"><div class="cc-skeleton" style="height:120px"></div></div>
+        </div>
+
+        <!-- ============== Auto-suggested FAQ entries ============== -->
+        <div class="cc-section" id="ccFaqSection">
+            <div class="cc-section-header">
+                <div>
+                    <div class="cc-section-title">🌐 Auto-suggested FAQ entries (for the website)</div>
+                    <div class="cc-section-desc">AI drafts a Q/A from clusters of similar customer emails — review &amp; approve before publishing</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <select id="ccFaqStatus" onchange="ccFaqLoad()" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
+                        <option value="pending" selected>Pending review</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="exported">Exported</option>
+                    </select>
+                    <button class="cc-btn ghost sm" onclick="ccFaqRunNow()">↻ Generate new drafts</button>
+                </div>
+            </div>
+            <div id="ccFaqList"><div class="cc-skeleton" style="height:80px"></div></div>
+        </div>
+
+        <!-- ============== Auto-suggested AI training entries ============== -->
+        <div class="cc-section" id="ccTrainingSection">
+            <div class="cc-section-header">
+                <div>
+                    <div class="cc-section-title">🤖 Auto-suggested AI training entries</div>
+                    <div class="cc-section-desc">AI drafts canned-reply templates with {{placeholders}} for the AI to use on common questions</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <select id="ccTrainingStatus" onchange="ccTrainingLoad()" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
+                        <option value="pending" selected>Pending review</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="applied">Applied</option>
+                    </select>
+                    <button class="cc-btn ghost sm" onclick="ccTrainingRunNow()">↻ Generate new drafts</button>
+                </div>
+            </div>
+            <div id="ccTrainingList"><div class="cc-skeleton" style="height:80px"></div></div>
         </div>
 
         <!-- Email Archive: search across years of email history -->
@@ -15014,6 +15147,426 @@ function ccArchiveOpenPanel() {
     // Scroll to archive section
     const el = document.getElementById('ccArchiveSection');
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* =========================================================================
+ * Email Intelligence — Manager Attention, Quality, Top Questions, Heatmap,
+ * FAQ candidates, Training candidates
+ * ======================================================================= */
+
+function ccEsc(s) {
+    return (s == null ? '' : String(s))
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function ccFmtTimeAgo(iso) {
+    if (!iso) return '';
+    const d = new Date(iso); if (isNaN(d)) return '';
+    const sec = Math.round((Date.now() - d.getTime()) / 1000);
+    if (sec < 60) return sec + 's ago';
+    if (sec < 3600) return Math.round(sec / 60) + 'm ago';
+    if (sec < 86400) return Math.round(sec / 3600) + 'h ago';
+    return Math.round(sec / 86400) + 'd ago';
+}
+function ccSevColor(s) {
+    return s === 'critical' ? '#7f1d1d' :
+           s === 'high'     ? '#b91c1c' :
+           s === 'medium'   ? '#b45309' :
+           s === 'low'      ? '#475569' : '#475569';
+}
+function ccTypeLabel(t) {
+    return ({
+        complaint:         'Complaint',
+        escalation:        'Escalation',
+        repeat_complaint:  'Repeat',
+        damage_claim:      'Damage',
+        sla_breach:        'SLA breach',
+        low_quality_reply: 'Low-quality reply',
+    })[t] || t;
+}
+async function ccApi(path, opts = {}) {
+    const r = await fetch(path, {
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+        ...opts,
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+}
+
+/* ----------------------- Manager Attention ----------------------- */
+
+async function ccAttentionLoad() {
+    const root = document.getElementById('ccAttentionList');
+    const desc = document.getElementById('ccAttentionDesc');
+    if (!root) return;
+    root.innerHTML = '<div class="cc-skeleton" style="height:80px"></div>';
+    try {
+        const t = (document.getElementById('ccAttentionFilter') || {}).value || '';
+        const s = (document.getElementById('ccAttentionSeverity') || {}).value || '';
+        const params = new URLSearchParams();
+        if (t) params.set('item_type', t);
+        if (s) params.set('severity', s);
+        params.set('limit', 100);
+        const data = await ccApi('/api/intel/attention?' + params.toString());
+        const items = data.items || [];
+        if (desc) desc.textContent = items.length === 0 ? 'You\'re all caught up — nothing flagged' :
+                  `${items.length} open item${items.length === 1 ? '' : 's'}`;
+        if (!items.length) {
+            root.innerHTML = '<div style="padding:24px;text-align:center;color:#64748b;background:#f8fafc;border-radius:10px">✅ Nothing currently needs your attention.</div>';
+            return;
+        }
+        root.innerHTML = items.map(it => {
+            const sev = ccSevColor(it.severity);
+            return `<div style="border:1px solid #e2e8f0;border-left:4px solid ${sev};border-radius:10px;padding:12px 14px;margin-bottom:8px;background:#fff">
+                <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+                    <div style="flex:1;min-width:240px">
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px">
+                            <span style="font-size:11px;font-weight:700;color:#fff;background:${sev};padding:2px 8px;border-radius:10px;text-transform:uppercase">${ccEsc(it.severity || 'medium')}</span>
+                            <span style="font-size:11px;font-weight:600;color:#475569;background:#f1f5f9;padding:2px 8px;border-radius:10px">${ccEsc(ccTypeLabel(it.item_type))}</span>
+                            <span style="font-size:11px;color:#94a3b8">${ccFmtTimeAgo(it.detected_at)}</span>
+                            ${it.mailbox_email ? `<span style="font-size:11px;color:#64748b">${ccEsc(it.mailbox_email)}</span>` : ''}
+                        </div>
+                        <div style="font-weight:600;color:#0f172a;margin-bottom:4px">${ccEsc(it.title)}</div>
+                        ${it.summary ? `<div style="font-size:13px;color:#475569;margin-bottom:4px">${ccEsc(it.summary)}</div>` : ''}
+                        ${it.snippet ? `<div style="font-size:12px;color:#64748b;background:#f8fafc;padding:6px 10px;border-radius:6px;margin-top:6px;max-height:60px;overflow:hidden">${ccEsc(it.snippet)}</div>` : ''}
+                        <div style="font-size:11px;color:#64748b;margin-top:6px">
+                            ${it.customer_email ? `Customer: ${ccEsc(it.customer_email)} ` : ''}
+                            ${it.rep_name || it.rep_email ? `· Rep: ${ccEsc(it.rep_name || it.rep_email)}` : ''}
+                        </div>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:4px;min-width:140px">
+                        ${it.thread_id ? `<button class="cc-btn ghost sm" onclick="ccArchiveOpenThread('${it.thread_id}')">Open thread</button>` : ''}
+                        <button class="cc-btn sm" style="background:#10b981;border-color:#10b981;color:#fff" onclick="ccAttentionAct('${it.id}','resolve')">Resolve</button>
+                        <button class="cc-btn ghost sm" onclick="ccAttentionAct('${it.id}','dismiss')">Dismiss</button>
+                        <button class="cc-btn ghost sm" onclick="ccAttentionSnoozePrompt('${it.id}')">Snooze…</button>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        root.innerHTML = '<div style="padding:16px;color:#b91c1c">Failed to load: ' + ccEsc(e.message) + '</div>';
+    }
+}
+async function ccAttentionAct(id, action) {
+    try {
+        const body = action === 'dismiss'
+            ? { reason: prompt('Optional reason for dismissing:') || '' }
+            : {};
+        await ccApi(`/api/intel/attention/${id}/${action}`, { method: 'POST', body: JSON.stringify(body) });
+        ccAttentionLoad();
+    } catch (e) { alert('Action failed: ' + e.message); }
+}
+async function ccAttentionSnoozePrompt(id) {
+    const days = prompt('Snooze for how many days?', '7');
+    if (!days) return;
+    const until = new Date(Date.now() + Number(days) * 86400000).toISOString();
+    try {
+        await ccApi(`/api/intel/attention/${id}/snooze`, { method: 'POST', body: JSON.stringify({ until }) });
+        ccAttentionLoad();
+    } catch (e) { alert('Snooze failed: ' + e.message); }
+}
+async function ccAttentionRunDetectors() {
+    try {
+        await ccApi('/api/intel/attention/run', { method: 'POST', body: '{}' });
+        setTimeout(ccAttentionLoad, 1500);
+    } catch (e) { alert('Re-scan failed: ' + e.message); }
+}
+
+/* --------------------------- Quality --------------------------- */
+
+async function ccQualityLoad() {
+    const root = document.getElementById('ccQualityTable');
+    if (!root) return;
+    root.innerHTML = '<div class="cc-skeleton" style="height:80px"></div>';
+    try {
+        const days = (document.getElementById('ccQualityDays') || {}).value || '30';
+        const data = await ccApi('/api/intel/quality?days=' + encodeURIComponent(days));
+        const rows = data.rows || [];
+        if (!rows.length) {
+            root.innerHTML = '<div style="padding:18px;color:#64748b;background:#f8fafc;border-radius:10px">No graded replies yet. The grader runs every 5 minutes on new outbound messages, or click "Grade backlog…" to grade older replies.</div>';
+            return;
+        }
+        const ths = `<thead><tr style="font-size:11px;text-transform:uppercase;color:#64748b;text-align:left">
+            <th style="padding:8px">Rep</th><th>Replies</th>
+            <th>Tone</th><th>Complete</th><th>Accuracy</th><th>Followthrough</th>
+            <th>Overall</th><th>Low-quality</th><th></th></tr></thead>`;
+        const trs = rows.map(r => {
+            const overall = Number(r.avg_overall || 0);
+            const overallColor = overall >= 4 ? '#10b981' : overall >= 3 ? '#f59e0b' : '#ef4444';
+            return `<tr style="border-top:1px solid #e2e8f0;font-size:13px">
+                <td style="padding:8px;font-weight:600;color:#0f172a">${ccEsc(r.rep)}</td>
+                <td>${r.replies_graded}</td>
+                <td>${r.avg_tone || '—'}</td>
+                <td>${r.avg_completeness || '—'}</td>
+                <td>${r.avg_accuracy || '—'}</td>
+                <td>${r.avg_followthrough || '—'}</td>
+                <td style="font-weight:700;color:${overallColor}">${r.avg_overall || '—'}</td>
+                <td style="color:${r.low_quality_count > 0 ? '#b91c1c' : '#94a3b8'};font-weight:600">${r.low_quality_count}</td>
+                <td><button class="cc-btn ghost sm" onclick="ccQualityShowWorst('${ccEsc(r.rep_email || '')}')">Worst replies</button></td>
+            </tr>`;
+        }).join('');
+        root.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">${ths}<tbody>${trs}</tbody></table></div>`;
+    } catch (e) {
+        root.innerHTML = '<div style="padding:16px;color:#b91c1c">Failed to load: ' + ccEsc(e.message) + '</div>';
+    }
+}
+async function ccQualityShowWorst(repEmail) {
+    try {
+        const days = (document.getElementById('ccQualityDays') || {}).value || '30';
+        const params = new URLSearchParams({ days, limit: 25 });
+        if (repEmail) params.set('rep_email', repEmail);
+        const data = await ccApi('/api/intel/quality/worst?' + params.toString());
+        const rows = data.rows || [];
+        const html = rows.length ? rows.map(r => {
+            const score = Number(r.overall_score || 0);
+            const c = score <= 2 ? '#b91c1c' : '#b45309';
+            return `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-bottom:8px;background:#fff">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+                    <span style="font-weight:700;color:${c}">${score.toFixed(1)}/5</span>
+                    <span style="font-size:12px;color:#64748b">${ccEsc(r.rep_name || r.rep_email || '')}</span>
+                    <span style="font-size:11px;color:#94a3b8">${ccFmtTimeAgo(r.sent_at)}</span>
+                </div>
+                <div style="font-weight:600;color:#0f172a;margin-bottom:4px">${ccEsc(r.subject || '(no subject)')}</div>
+                <div style="font-size:12px;color:#475569;margin-bottom:4px">tone ${r.tone_score} · complete ${r.completeness_score} · accuracy ${r.accuracy_score} · followthrough ${r.followthrough_score}</div>
+                ${r.weaknesses ? `<div style="font-size:12px;color:#b91c1c;margin-bottom:4px"><b>Weakness:</b> ${ccEsc(r.weaknesses)}</div>` : ''}
+                ${r.coaching_note ? `<div style="font-size:12px;color:#0f172a;background:#fef3c7;padding:6px 8px;border-radius:6px;margin-top:6px"><b>Coaching:</b> ${ccEsc(r.coaching_note)}</div>` : ''}
+                ${r.thread_id ? `<button class="cc-btn ghost sm" style="margin-top:6px" onclick="ccArchiveOpenThread('${r.thread_id}')">Open thread</button>` : ''}
+            </div>`;
+        }).join('') : '<div style="color:#64748b">No low-quality replies in this window — nice work!</div>';
+        ccShowModal('Worst-graded replies', html);
+    } catch (e) { alert('Failed: ' + e.message); }
+}
+async function ccQualityBackfillPrompt() {
+    if (!confirm('Grade ALL ungraded outbound replies? This sends every reply through Gemini 2.5 Flash and may cost a few dollars.')) return;
+    try {
+        const r = await ccApi('/api/intel/quality/backfill', { method: 'POST', body: '{}' });
+        alert(r.message || `Started run · ${r.total || 0} replies queued`);
+        ccArchiveLoadStatus();
+    } catch (e) { alert('Failed: ' + e.message); }
+}
+
+/* ----------------------- Top questions / Heatmap ----------------------- */
+
+let _ccTopQTimer = null;
+function ccTopQDebounced() { clearTimeout(_ccTopQTimer); _ccTopQTimer = setTimeout(ccTopQLoad, 350); }
+
+async function ccTopQLoad() {
+    const root = document.getElementById('ccTopQTable');
+    if (!root) return;
+    root.innerHTML = '<div class="cc-skeleton" style="height:80px"></div>';
+    try {
+        const days = (document.getElementById('ccTopQDays') || {}).value || '30';
+        const product = (document.getElementById('ccTopQProduct') || {}).value || '';
+        const params = new URLSearchParams({ days, limit: 30 });
+        if (product) params.set('product_line', product);
+        const data = await ccApi('/api/intel/top-questions?' + params.toString());
+        const rows = data.rows || [];
+        if (!rows.length) {
+            root.innerHTML = '<div style="padding:18px;color:#64748b;background:#f8fafc;border-radius:10px">No classifications yet for this window. The classifier runs every 5 minutes on new inbound messages — or click "Classify backlog…" to backfill.</div>';
+            return;
+        }
+        const ths = `<thead><tr style="font-size:11px;text-transform:uppercase;color:#64748b;text-align:left">
+            <th style="padding:8px">Product</th><th>Question type</th><th>Volume</th>
+            <th>Complaints</th><th>Sample question</th></tr></thead>`;
+        const trs = rows.map(r => {
+            const sample = (r.sample_questions && r.sample_questions[0]) || '';
+            return `<tr style="border-top:1px solid #e2e8f0;font-size:13px">
+                <td style="padding:8px;font-weight:600;color:#0f172a">${ccEsc(r.product_line)}</td>
+                <td><span style="font-size:11px;font-weight:600;color:#475569;background:#f1f5f9;padding:2px 8px;border-radius:10px">${ccEsc(r.question_type)}</span></td>
+                <td style="font-weight:700">${r.volume}</td>
+                <td style="color:${r.complaint_count > 0 ? '#b91c1c' : '#94a3b8'}">${r.complaint_count}</td>
+                <td style="color:#475569;max-width:360px">${ccEsc(sample)}</td>
+            </tr>`;
+        }).join('');
+        root.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">${ths}<tbody>${trs}</tbody></table></div>`;
+    } catch (e) {
+        root.innerHTML = '<div style="padding:16px;color:#b91c1c">Failed to load: ' + ccEsc(e.message) + '</div>';
+    }
+}
+
+async function ccClassifierBackfillPrompt() {
+    if (!confirm('Classify ALL unclassified inbound emails in the archive? This sends every message through Gemini 2.5 Flash. For ~5k messages expect <$1, for ~50k expect ~$4.')) return;
+    try {
+        const r = await ccApi('/api/intel/classify/backfill', { method: 'POST', body: '{}' });
+        alert(r.message || `Started run · ${r.total || 0} messages queued`);
+        ccArchiveLoadStatus();
+    } catch (e) { alert('Failed: ' + e.message); }
+}
+
+async function ccHeatmapLoad() {
+    const root = document.getElementById('ccHeatmapWrap');
+    if (!root) return;
+    root.innerHTML = '<div class="cc-skeleton" style="height:120px"></div>';
+    try {
+        const days = (document.getElementById('ccHeatmapDays') || {}).value || '30';
+        const data = await ccApi('/api/intel/heatmap?days=' + encodeURIComponent(days));
+        const rows = data.rows || [];
+        if (!rows.length) {
+            root.innerHTML = '<div style="padding:18px;color:#64748b;background:#f8fafc;border-radius:10px">No data yet — classifier needs to run first.</div>';
+            return;
+        }
+        const products = Array.from(new Set(rows.map(r => r.product_line))).sort();
+        const matrix = {};
+        let max = 0;
+        for (const p of products) matrix[p] = new Array(24).fill(0);
+        for (const r of rows) {
+            const v = Number(r.volume || 0);
+            matrix[r.product_line][r.hour] = v;
+            if (v > max) max = v;
+        }
+        const cell = (v) => {
+            if (!v) return '<td style="background:#f8fafc;border:1px solid #e2e8f0;width:24px;height:24px"></td>';
+            const intensity = max > 0 ? v / max : 0;
+            const r = Math.round(99 + (220 - 99) * (1 - intensity));
+            const g = Math.round(102 + (180 - 102) * (1 - intensity));
+            const b = Math.round(241 + (255 - 241) * (1 - intensity));
+            return `<td title="${v} email${v===1?'':'s'}" style="background:rgb(${r},${g},${b});border:1px solid #e2e8f0;width:24px;height:24px;text-align:center;font-size:10px;color:${intensity>0.5?'#fff':'#0f172a'}">${v >= 10 ? v : ''}</td>`;
+        };
+        const hours = Array.from({length: 24}, (_, i) => i);
+        const html = `<table style="border-collapse:collapse;font-size:11px">
+            <thead><tr><th style="padding:4px 6px;text-align:left">Product</th>${hours.map(h => `<th style="padding:2px;width:24px;color:#64748b">${h}</th>`).join('')}</tr></thead>
+            <tbody>${products.map(p => `<tr><td style="padding:4px 6px;font-weight:600;color:#0f172a;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis">${ccEsc(p)}</td>${matrix[p].map(cell).join('')}</tr>`).join('')}</tbody>
+            </table>
+            <div style="margin-top:6px;font-size:11px;color:#64748b">Hour of day (0–23) · darker = more emails</div>`;
+        root.innerHTML = html;
+    } catch (e) {
+        root.innerHTML = '<div style="padding:16px;color:#b91c1c">Failed to load: ' + ccEsc(e.message) + '</div>';
+    }
+}
+
+/* --------------------- FAQ candidates --------------------- */
+
+async function ccFaqLoad() {
+    const root = document.getElementById('ccFaqList');
+    if (!root) return;
+    root.innerHTML = '<div class="cc-skeleton" style="height:80px"></div>';
+    try {
+        const status = (document.getElementById('ccFaqStatus') || {}).value || 'pending';
+        const data = await ccApi('/api/intel/faq-candidates?status=' + encodeURIComponent(status));
+        const rows = data.rows || [];
+        if (!rows.length) {
+            root.innerHTML = `<div style="padding:18px;color:#64748b;background:#f8fafc;border-radius:10px">No ${status} FAQ drafts. Drafts are generated nightly at 4:00 AM, or click "Generate new drafts" to run now.</div>`;
+            return;
+        }
+        root.innerHTML = rows.map(r => {
+            const score = Number(r.score || 0);
+            const cConf = score >= 75 ? '#10b981' : score >= 50 ? '#f59e0b' : '#ef4444';
+            return `<div style="border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:10px;background:#fff">
+                <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                        <span style="font-size:11px;font-weight:600;color:#475569;background:#f1f5f9;padding:2px 8px;border-radius:10px">${ccEsc(r.product_line)}</span>
+                        <span style="font-size:11px;font-weight:600;color:#475569;background:#f1f5f9;padding:2px 8px;border-radius:10px">${ccEsc(r.question_type)}</span>
+                        <span style="font-size:11px;color:#64748b">based on ${r.source_count} email${r.source_count===1?'':'s'}</span>
+                        <span style="font-size:11px;font-weight:700;color:#fff;background:${cConf};padding:2px 8px;border-radius:10px">conf ${score}</span>
+                    </div>
+                    ${status === 'pending' ? `<div style="display:flex;gap:6px">
+                        <button class="cc-btn sm" style="background:#10b981;border-color:#10b981;color:#fff" onclick="ccFaqReview('${r.id}','approve')">Approve</button>
+                        <button class="cc-btn ghost sm" onclick="ccFaqReview('${r.id}','reject')">Reject</button>
+                    </div>` : ''}
+                </div>
+                <div style="font-weight:700;color:#0f172a;font-size:14px;margin-bottom:6px">Q: ${ccEsc(r.question)}</div>
+                <div style="color:#1e293b;font-size:13px;white-space:pre-wrap;background:#f8fafc;padding:10px 12px;border-radius:8px"><b>A:</b> ${ccEsc(r.suggested_answer)}</div>
+                ${r.review_note ? `<div style="font-size:12px;color:#64748b;margin-top:6px"><b>Note:</b> ${ccEsc(r.review_note)}</div>` : ''}
+            </div>`;
+        }).join('');
+    } catch (e) {
+        root.innerHTML = '<div style="padding:16px;color:#b91c1c">Failed to load: ' + ccEsc(e.message) + '</div>';
+    }
+}
+async function ccFaqReview(id, action) {
+    let note = null;
+    if (action === 'reject') { note = prompt('Optional rejection reason:') || ''; }
+    try {
+        await ccApi(`/api/intel/faq-candidates/${id}/review`, { method: 'POST', body: JSON.stringify({ action, note }) });
+        ccFaqLoad();
+    } catch (e) { alert('Failed: ' + e.message); }
+}
+async function ccFaqRunNow() {
+    if (!confirm('Generate new FAQ drafts now? This calls Gemini for each cluster (~$0.01-0.05 per cluster).')) return;
+    try {
+        const r = await ccApi('/api/intel/faq-candidates/run', { method: 'POST', body: '{}' });
+        alert(r.message || `Started run · ${r.total || 0} clusters`);
+        ccArchiveLoadStatus();
+    } catch (e) { alert('Failed: ' + e.message); }
+}
+
+/* --------------------- Training candidates --------------------- */
+
+async function ccTrainingLoad() {
+    const root = document.getElementById('ccTrainingList');
+    if (!root) return;
+    root.innerHTML = '<div class="cc-skeleton" style="height:80px"></div>';
+    try {
+        const status = (document.getElementById('ccTrainingStatus') || {}).value || 'pending';
+        const data = await ccApi('/api/intel/training-candidates?status=' + encodeURIComponent(status));
+        const rows = data.rows || [];
+        if (!rows.length) {
+            root.innerHTML = `<div style="padding:18px;color:#64748b;background:#f8fafc;border-radius:10px">No ${status} training drafts. Drafts are generated nightly, or click "Generate new drafts".</div>`;
+            return;
+        }
+        root.innerHTML = rows.map(r => {
+            const score = Number(r.score || 0);
+            const cConf = score >= 75 ? '#10b981' : score >= 50 ? '#f59e0b' : '#ef4444';
+            return `<div style="border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:10px;background:#fff">
+                <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                        <span style="font-size:11px;font-weight:600;color:#475569;background:#f1f5f9;padding:2px 8px;border-radius:10px">${ccEsc(r.product_line)}</span>
+                        <span style="font-size:11px;font-weight:600;color:#475569;background:#f1f5f9;padding:2px 8px;border-radius:10px">${ccEsc(r.question_type)}</span>
+                        <span style="font-size:11px;color:#64748b">${r.matched_email_count} similar emails</span>
+                        <span style="font-size:11px;font-weight:700;color:#fff;background:${cConf};padding:2px 8px;border-radius:10px">conf ${score}</span>
+                    </div>
+                    ${status === 'pending' ? `<div style="display:flex;gap:6px">
+                        <button class="cc-btn sm" style="background:#10b981;border-color:#10b981;color:#fff" onclick="ccTrainingReview('${r.id}','approve')">Approve</button>
+                        <button class="cc-btn ghost sm" onclick="ccTrainingReview('${r.id}','reject')">Reject</button>
+                    </div>` : status === 'approved' ? `<button class="cc-btn sm" onclick="ccTrainingReview('${r.id}','apply')">Apply to AI</button>` : ''}
+                </div>
+                <div style="font-weight:700;color:#0f172a;font-size:14px;margin-bottom:6px">Trigger: ${ccEsc(r.trigger_question)}</div>
+                <div style="color:#1e293b;font-size:13px;white-space:pre-wrap;background:#f8fafc;padding:10px 12px;border-radius:8px">${ccEsc(r.suggested_response)}</div>
+                ${r.placeholders && r.placeholders.length ? `<div style="margin-top:6px;font-size:11px;color:#64748b">Placeholders: ${r.placeholders.map(p => `<code style="background:#fef3c7;padding:1px 6px;border-radius:4px;color:#92400e">{{${ccEsc(p)}}}</code>`).join(' ')}</div>` : ''}
+            </div>`;
+        }).join('');
+    } catch (e) {
+        root.innerHTML = '<div style="padding:16px;color:#b91c1c">Failed to load: ' + ccEsc(e.message) + '</div>';
+    }
+}
+async function ccTrainingReview(id, action) {
+    let note = null;
+    if (action === 'reject') { note = prompt('Optional rejection reason:') || ''; }
+    try {
+        await ccApi(`/api/intel/training-candidates/${id}/review`, { method: 'POST', body: JSON.stringify({ action, note }) });
+        ccTrainingLoad();
+    } catch (e) { alert('Failed: ' + e.message); }
+}
+async function ccTrainingRunNow() {
+    if (!confirm('Generate new training-candidate drafts now? This calls Gemini for each cluster.')) return;
+    try {
+        const r = await ccApi('/api/intel/training-candidates/run', { method: 'POST', body: '{}' });
+        alert(r.message || `Started run · ${r.total || 0} clusters`);
+        ccArchiveLoadStatus();
+    } catch (e) { alert('Failed: ' + e.message); }
+}
+
+/* ----------------------- shared modal ----------------------- */
+function ccShowModal(title, htmlBody) {
+    let modal = document.getElementById('ccIntelModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'ccIntelModal';
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px';
+        modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+        modal.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:780px;width:100%;max-height:88vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid #e2e8f0">
+                <div id="ccIntelModalTitle" style="font-weight:700;font-size:15px;color:#0f172a"></div>
+                <button onclick="document.getElementById('ccIntelModal').style.display='none'" style="background:none;border:0;font-size:24px;color:#64748b;cursor:pointer">×</button>
+            </div>
+            <div id="ccIntelModalBody" style="padding:18px;overflow-y:auto"></div>
+        </div>`;
+        document.body.appendChild(modal);
+    }
+    document.getElementById('ccIntelModalTitle').textContent = title;
+    document.getElementById('ccIntelModalBody').innerHTML = htmlBody;
+    modal.style.display = 'flex';
 }
 </script>
 
