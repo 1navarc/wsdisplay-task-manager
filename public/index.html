@@ -127,10 +127,12 @@
         /* ===== MAIN APP LAYOUT ===== */
         .app-container {
             display: none;
-            height: 100vh;
+            /* Reserve 40px at top for the fixed top tab bar.
+               Use explicit calc instead of padding-top + box-sizing so the
+               flex children get an unambiguous definite height to size against. */
+            height: calc(100vh - 40px);
+            margin-top: 40px;
             flex-direction: row;
-            padding-top: 40px;
-            box-sizing: border-box;
         }
 
         .app-container.active {
