@@ -5166,8 +5166,32 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
         function showLoginScreen() {
             const loading = document.getElementById('loadingScreen');
             if (loading) loading.style.display = 'none';
-            document.getElementById('loginScreen').style.display = 'flex';
+            const loginEl = document.getElementById('loginScreen');
+            loginEl.style.display = 'flex';
             document.getElementById('appContainer').classList.remove('active');
+            // Surface OAuth-callback errors so we can diagnose sign-in failures
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const errCode = params.get('error');
+                if (errCode) {
+                    const messages = {
+                        auth_failed: 'Sign-in failed. Your Google account may not be authorized for this workspace, or there was a server error. Please contact your administrator.',
+                        session_failed: 'We signed you in with Google but could not save your session. Try clearing cookies for wsmail.ws and signing in again.',
+                        no_email: 'Google did not return an email address for this account.',
+                    };
+                    const msg = messages[errCode] || ('Sign-in error: ' + errCode);
+                    let banner = document.getElementById('loginErrorBanner');
+                    if (!banner) {
+                        banner = document.createElement('div');
+                        banner.id = 'loginErrorBanner';
+                        banner.style.cssText = 'position:fixed;top:18px;left:50%;transform:translateX(-50%);max-width:520px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:14px 18px;border-radius:10px;font-size:14px;line-height:1.5;box-shadow:0 4px 16px rgba(0,0,0,0.15);z-index:9999;';
+                        document.body.appendChild(banner);
+                    }
+                    banner.innerHTML = '<strong>Sign-in problem (' + errCode + '):</strong><br>' + msg;
+                    // Clean URL so a refresh doesn't keep re-showing
+                    try { window.history.replaceState({}, '', window.location.pathname); } catch(e) {}
+                }
+            } catch(e) { console.error('Login error banner failed:', e); }
             // Start login music (user interaction needed first — autoplay blocked by browsers)
             startLoginMusic();
         }

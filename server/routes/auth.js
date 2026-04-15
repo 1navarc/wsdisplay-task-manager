@@ -16,16 +16,37 @@ router.get('/google/callback', async (req, res) => {
     client.setCredentials(tokens);
     const oauth2 = require('googleapis').google.oauth2({ version: 'v2', auth: client });
     const { data } = await oauth2.userinfo.get();
-    let user = (await pool.query('SELECT * FROM users WHERE email = $1', [data.email])).rows[0];
+    // Normalize email to lowercase to match how invite rows are stored
+    const normalizedEmail = (data.email || '').trim().toLowerCase();
+    if (!normalizedEmail) {
+      console.error('Auth error: Google did not return an email address');
+      return res.redirect('/?error=no_email');
+    }
+    // Case-insensitive lookup to find pre-created invite rows regardless of case
+    let user = (await pool.query('SELECT * FROM users WHERE LOWER(email) = $1', [normalizedEmail])).rows[0];
     if (!user) {
-      const result = await pool.query(
-        'INSERT INTO users (id, email, name, avatar_url, google_token, role) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-        [uuidv4(), data.email, data.name, data.picture, JSON.stringify(tokens), 'rep']
-      );
-      user = result.rows[0];
+      try {
+        const result = await pool.query(
+          'INSERT INTO users (id, email, name, avatar_url, google_token, role) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+          [uuidv4(), normalizedEmail, data.name, data.picture, JSON.stringify(tokens), 'rep']
+        );
+        user = result.rows[0];
+      } catch (insertErr) {
+        // Race condition or unique-email collision (mixed case row already exists) -> retry the lookup
+        console.error('Insert user fallback:', insertErr.message);
+        user = (await pool.query('SELECT * FROM users WHERE LOWER(email) = $1', [normalizedEmail])).rows[0];
+        if (!user) throw insertErr;
+        await pool.query(
+          'UPDATE users SET google_token=$1, name=COALESCE($2,name), avatar_url=COALESCE($3,avatar_url), email=$4 WHERE id=$5',
+          [JSON.stringify(tokens), data.name, data.picture, normalizedEmail, user.id]
+        );
+      }
     } else {
-      await pool.query('UPDATE users SET google_token=$1, name=$2, avatar_url=$3 WHERE id=$4',
-        [JSON.stringify(tokens), data.name, data.picture, user.id]);
+      // Update token and ensure the stored email is normalized lowercase going forward
+      await pool.query(
+        'UPDATE users SET google_token=$1, name=COALESCE($2,name), avatar_url=COALESCE($3,avatar_url), email=$4 WHERE id=$5',
+        [JSON.stringify(tokens), data.name, data.picture, normalizedEmail, user.id]
+      );
     }
     req.session.userId = user.id;
     req.session.save((err) => {
