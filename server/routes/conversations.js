@@ -165,6 +165,20 @@ router.post('/', requireAuth, async (req, res) => {
 
 router.get('/:id', requireAuth, async (req, res) => {
   try {
+    // Lightweight probe used by the inbox auto-refresh: returns just the
+    // total message count + last message timestamp so the UI can decide
+    // whether a re-render is actually needed.
+    if (req.query.meta_only === '1' || req.query.meta_only === 'true') {
+      const meta = await pool.query(
+        'SELECT COUNT(*)::int AS total, MAX(sent_at) AS last_sent_at FROM messages WHERE conversation_id=$1',
+        [req.params.id]
+      );
+      return res.json({
+        id: req.params.id,
+        totalMessages: meta.rows[0].total,
+        last_sent_at: meta.rows[0].last_sent_at,
+      });
+    }
     const limit = Math.min(parseInt(req.query.limit) || 100, 500);
     const offset = parseInt(req.query.offset) || 0;
     const [conv, msgs, msgCount, notes, tags] = await Promise.all([

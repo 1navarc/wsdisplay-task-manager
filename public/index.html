@@ -5229,7 +5229,9 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
 
             refreshIntervalId = setInterval(() => {
                 loadConversations();
-                if (currentConversation) loadConversationDetail();
+                // Only refresh the open thread if a NEW message has actually arrived,
+                // so the user's expanded messages / scroll position aren't blown away.
+                if (currentConversation) maybeRefreshOpenThread();
             }, 30000);
             syncIntervalId = setInterval(() => {
                 fetch('/api/gmail/sync', { credentials: 'include', method: 'POST' })
@@ -5532,8 +5534,45 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
             }
         }
 
+        // Lightweight "is there a new message?" probe used by the 30s auto-refresh.
+        // Only re-renders the thread when the message count has actually grown,
+        // so reading/expanding messages isn't interrupted every 30s.
+        async function maybeRefreshOpenThread() {
+            if (!currentConversation) return;
+            try {
+                const r = await fetch(`/api/conversations/${currentConversation}?meta_only=1`, { credentials: 'include' });
+                if (!r.ok) return;
+                const meta = await r.json();
+                const cur = window._currentConvData;
+                const remoteCount = meta.totalMessages != null ? meta.totalMessages : (meta.messages ? meta.messages.length : null);
+                const localCount  = cur && (cur.totalMessages != null ? cur.totalMessages : (cur.messages ? cur.messages.length : 0));
+                if (remoteCount != null && localCount != null && remoteCount > localCount) {
+                    // Surface a non-disruptive banner instead of re-rendering automatically.
+                    showNewMessageBanner(remoteCount - localCount);
+                }
+            } catch (_) {}
+        }
+
+        function showNewMessageBanner(n) {
+            const container = document.getElementById('conversationDetailContainer');
+            if (!container) return;
+            if (document.getElementById('newMsgBanner')) return; // already shown
+            const banner = document.createElement('div');
+            banner.id = 'newMsgBanner';
+            banner.style.cssText = 'position:sticky;top:0;z-index:20;background:#1d4ed8;color:#fff;padding:10px 14px;border-radius:8px;margin:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 4px 12px rgba(29,78,216,0.25);font-size:13px;font-weight:600;';
+            banner.innerHTML = `
+                <span>↓ ${n} new message${n>1?'s':''} in this thread</span>
+                <span>
+                    <button onclick="loadConversationDetail();" style="padding:6px 12px;border:1px solid rgba(255,255,255,0.4);background:rgba(255,255,255,0.15);color:#fff;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">Refresh now</button>
+                    <button onclick="document.getElementById('newMsgBanner')?.remove();" style="padding:6px 10px;margin-left:6px;border:none;background:transparent;color:#fff;cursor:pointer;font-size:18px;line-height:1;">×</button>
+                </span>`;
+            container.prepend(banner);
+        }
+
         function loadConversationDetail() {
             if (!currentConversation) return;
+            // Drop any pending "new message" banner since we're rebuilding the thread anyway
+            document.getElementById('newMsgBanner')?.remove();
 
             fetch(`/api/conversations/${currentConversation}`, { credentials: 'include' })
                 .then(r => {
@@ -16252,17 +16291,30 @@ async function ccIntelStatsLoad() {
     if (!wrap) return;
     wrap.innerHTML = '<div class="cc-skeleton" style="height:80px"></div>'.repeat(5);
     try {
-        const data = await ccApi('/api/intel/summary?days=30');
+        // Convert the CC range (in hours) into a days value the /summary endpoint accepts.
+        const hrs = (typeof _ccRangeHours === 'number' && _ccRangeHours > 0) ? _ccRangeHours : 24;
+        const days = Math.max(1, Math.round(hrs / 24));
+        const rangeShort = hrs <= 24 ? '24h'
+            : hrs <= 168 ? '7d'
+            : hrs <= 720 ? '30d'
+            : hrs <= 2160 ? '90d'
+            : `${days}d`;
+        const rangeLong = hrs <= 24 ? 'last 24h'
+            : hrs <= 168 ? 'last 7 days'
+            : hrs <= 720 ? 'last 30 days'
+            : hrs <= 2160 ? 'last 90 days'
+            : `last ${days} days`;
+        const data = await ccApi('/api/intel/summary?days=' + days);
         const card = (cls, lbl, val, sub) =>
             `<div class="cc-stat-card ${cls || ''}"><div class="lbl">${lbl}</div><div class="val">${val}</div><div class="sub">${sub || ''}</div></div>`;
         const av = data.avg_quality;
         const qualClass = av == null ? '' : (av >= 4 ? 'good' : av >= 3 ? '' : 'warn');
         wrap.innerHTML = [
-            card('', 'Inbound · 30d', (data.total_inbound || 0).toLocaleString(), `${(data.classified || 0).toLocaleString()} classified`),
-            card(data.complaints > 5 ? 'warn' : '', 'Complaints', (data.complaints || 0).toLocaleString(), 'last 30 days'),
+            card('', `Inbound · ${rangeShort}`, (data.total_inbound || 0).toLocaleString(), `${(data.classified || 0).toLocaleString()} classified`),
+            card(data.complaints > 5 ? 'warn' : '', 'Complaints', (data.complaints || 0).toLocaleString(), rangeLong),
             card(data.attention_open > 0 ? 'warn' : 'good', 'Attention queue', (data.attention_open || 0).toLocaleString(), 'open items'),
-            card(qualClass, 'Avg reply quality', av != null ? av.toFixed(2) : '—', av != null ? 'out of 5.0' : 'no grades yet'),
-            card('', 'Replies graded', (data.graded || 0).toLocaleString(), 'last 30 days'),
+            card(qualClass, 'Avg reply quality', av != null ? av.toFixed(2) : '—', av != null ? `out of 5.0 · ${rangeLong}` : 'no grades yet'),
+            card('', 'Replies graded', (data.graded || 0).toLocaleString(), rangeLong),
         ].join('');
     } catch (e) {
         wrap.innerHTML = '<div style="padding:12px;color:#b91c1c;font-size:13px">Stats unavailable: ' + ccEsc(e.message) + '</div>';
