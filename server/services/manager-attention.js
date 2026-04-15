@@ -65,7 +65,7 @@ async function detectFromClassifications(sinceDays = 30) {
            t.gmail_thread_id, t.customer_email, t.customer_domain
       FROM email_archive_classifications c
       JOIN email_archive_messages m ON m.id = c.message_id
-      JOIN email_archive_threads t ON t.id = m.thread_id
+      JOIN email_archive_threads t ON t.id = m.thread_id AND t.junk_status IS DISTINCT FROM 'blocked'
      WHERE m.sent_at >= NOW() - ($1 || ' days')::interval
        AND (c.is_complaint OR c.asks_for_manager OR c.is_damage_claim)
        AND m.direction = 'inbound'`,
@@ -117,7 +117,7 @@ async function detectRepeatComplaints(windowDays = 60) {
            (ARRAY_AGG(t.customer_domain ORDER BY m.sent_at DESC))[1] AS customer_domain
       FROM email_archive_classifications c
       JOIN email_archive_messages m ON m.id = c.message_id
-      JOIN email_archive_threads t ON t.id = m.thread_id
+      JOIN email_archive_threads t ON t.id = m.thread_id AND t.junk_status IS DISTINCT FROM 'blocked'
      WHERE c.is_complaint = true
        AND m.direction = 'inbound'
        AND m.sent_at >= NOW() - ($1 || ' days')::interval
@@ -159,7 +159,7 @@ async function detectSlaBreaches(thresholdHours = 24, lookbackDays = 14) {
            m.body_text_clean, m.sent_at, m.from_email,
            t.gmail_thread_id, t.customer_email, t.customer_domain
       FROM email_archive_messages m
-      JOIN email_archive_threads t ON t.id = m.thread_id
+      JOIN email_archive_threads t ON t.id = m.thread_id AND t.junk_status IS DISTINCT FROM 'blocked'
      WHERE m.direction='inbound'
        AND m.sent_at >= NOW() - ($1 || ' days')::interval
        AND m.sent_at <  NOW() - ($2 || ' hours')::interval
@@ -207,7 +207,7 @@ async function detectLowQualityReplies(threshold = 2.5, lookbackDays = 30) {
            t.gmail_thread_id, t.customer_email, t.customer_domain
       FROM email_archive_rep_grades g
       JOIN email_archive_messages m ON m.id = g.message_id
-      JOIN email_archive_threads t ON t.id = m.thread_id
+      JOIN email_archive_threads t ON t.id = m.thread_id AND t.junk_status IS DISTINCT FROM 'blocked'
      WHERE g.overall_score IS NOT NULL
        AND g.overall_score <= $1
        AND m.sent_at >= NOW() - ($2 || ' days')::interval

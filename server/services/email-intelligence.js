@@ -550,7 +550,7 @@ async function worstReplies({ days = 30, repEmail = null, limit = 50 } = {}) {
            t.gmail_thread_id, t.customer_email
       FROM email_archive_rep_grades g
       JOIN email_archive_messages m ON m.id = g.message_id
-      JOIN email_archive_threads t ON t.id = m.thread_id
+      JOIN email_archive_threads t ON t.id = m.thread_id AND t.junk_status IS DISTINCT FROM 'blocked'
      WHERE ${conds.join(' AND ')}
      ORDER BY g.overall_score ASC, m.sent_at DESC
      LIMIT $${params.length}`, params);

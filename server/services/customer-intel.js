@@ -45,6 +45,7 @@ async function searchCandidates({ q, limit = 12 }) {
       FROM email_archive_threads
      WHERE customer_domain IS NOT NULL
        AND LOWER(customer_domain) LIKE $1
+       AND junk_status IS DISTINCT FROM 'blocked'
      GROUP BY customer_domain
      ORDER BY thread_count DESC, last_seen DESC
      LIMIT $2`, [like, limit]);
@@ -69,6 +70,7 @@ async function searchCandidates({ q, limit = 12 }) {
       FROM email_archive_threads
      WHERE customer_email IS NOT NULL
        AND LOWER(customer_email) LIKE $1
+       AND junk_status IS DISTINCT FROM 'blocked'
      GROUP BY customer_email, customer_domain
      ORDER BY thread_count DESC, last_seen DESC
      LIMIT $2`, [like, limit]);
@@ -90,6 +92,7 @@ async function searchCandidates({ q, limit = 12 }) {
            COUNT(DISTINCT m.thread_id)::int AS thread_count,
            MAX(m.sent_at) AS last_seen
       FROM email_archive_messages m
+      JOIN email_archive_threads t ON t.id = m.thread_id AND t.junk_status IS DISTINCT FROM 'blocked'
      WHERE m.direction = 'inbound'
        AND m.from_name IS NOT NULL
        AND LOWER(m.from_name) LIKE $1

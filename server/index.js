@@ -107,6 +107,7 @@ app.use('/api/ai', require('./routes/ai'));
 app.use('/api/command-center', require('./routes/command-center'));
 app.use('/api/archive', require('./routes/archive'));
 app.use('/api/intel', require('./routes/intelligence'));
+app.use('/api/junk', require('./routes/junk'));
 
 // Gmail webhook
 app.post('/api/gmail/webhook', require('./routes/gmail-webhook'));
