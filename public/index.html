@@ -129,10 +129,73 @@
             display: none;
             height: 100vh;
             flex-direction: row;
+            padding-top: 40px;
+            box-sizing: border-box;
         }
 
         .app-container.active {
             display: flex;
+        }
+
+        /* ============ Top tab bar (Inbox / Command Center / Settings / Analytics) ============ */
+        .top-tab-bar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 40px;
+            z-index: 60;
+            background: linear-gradient(90deg, #1e1b4b 0%, #312e81 50%, #1e1b4b 100%);
+            color: #e0e7ff;
+            display: none;
+            align-items: center;
+            padding: 0 12px;
+            border-bottom: 1px solid #4c1d95;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+            gap: 4px;
+        }
+        .top-tab-bar.active { display: flex; }
+        .top-tab-bar .ttb-brand {
+            display: flex; align-items: center; gap: 8px;
+            font-weight: 700; font-size: 13px; color: #fff;
+            padding: 0 10px 0 4px;
+            margin-right: 4px;
+            border-right: 1px solid rgba(255,255,255,0.12);
+            height: 100%;
+        }
+        .top-tab-bar .ttb-brand-badge {
+            background: #fff; color: #312e81; font-weight: 800;
+            font-size: 10px; padding: 2px 6px; border-radius: 4px;
+        }
+        .top-tab-bar .ttb-tab {
+            background: transparent;
+            border: 0;
+            color: #c7d2fe;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: inline-flex; align-items: center; gap: 6px;
+            transition: background 0.15s, color 0.15s;
+            height: 28px;
+        }
+        .top-tab-bar .ttb-tab:hover { background: rgba(255,255,255,0.08); color: #fff; }
+        .top-tab-bar .ttb-tab.active {
+            background: #fff;
+            color: #312e81;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+        }
+        .top-tab-bar .ttb-spacer { flex: 1; }
+        .top-tab-bar .ttb-user {
+            font-size: 11px; color: #c7d2fe; padding: 0 8px;
+            display: inline-flex; align-items: center; gap: 8px;
+        }
+        body.dark-mode .top-tab-bar {
+            background: linear-gradient(90deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+            border-bottom-color: #1e1b4b;
+        }
+        @media (max-width: 640px) {
+            .top-tab-bar .ttb-brand span { display: none; }
+            .top-tab-bar .ttb-tab { padding: 6px 8px; font-size: 11px; }
         }
 
         /* ===== LEFT SIDEBAR ===== */
@@ -4355,6 +4418,36 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
         </div>
     </div>
 
+    <!-- TOP TAB BAR (Inbox / Command Center / Settings / Analytics) -->
+    <div class="top-tab-bar" id="appTopTabs">
+        <div class="ttb-brand">
+            <span class="ttb-brand-badge">WS</span>
+            <span>wsmail</span>
+        </div>
+        <button class="ttb-tab active" id="topTabInbox" onclick="switchTab('inbox')" title="Inbox">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>
+            Inbox
+        </button>
+        <button class="ttb-tab" id="topTabCommandCenter" onclick="switchTab('commandcenter')" data-role-min="supervisor" title="Command Center">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>
+            Command Center
+        </button>
+        <button class="ttb-tab" id="topTabAnalytics" onclick="switchTab('analytics')" data-role-min="supervisor" title="Analytics">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+            Analytics
+        </button>
+        <button class="ttb-tab" id="topTabSettings" onclick="switchTab('settings')" data-role-min="manager" title="Settings">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            Settings
+        </button>
+        <button class="ttb-tab" id="topTabFeedback" onclick="switchTab('feedback')" title="Feedback">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            Feedback
+        </button>
+        <div class="ttb-spacer"></div>
+        <span class="ttb-user" id="topTabUser"></span>
+    </div>
+
     <!-- MAIN APP -->
     <div id="appContainer" class="app-container">
         <!-- SIDEBAR -->
@@ -4885,7 +4978,15 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
             if (loading) loading.style.display = 'none';
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('appContainer').classList.add('active');
+            const tt = document.getElementById('appTopTabs');
+            if (tt) tt.classList.add('active');
             updateUserDisplay();
+            // Reflect current user identity in top tab bar
+            try {
+                const u = (window.currentUser || {});
+                const tu = document.getElementById('topTabUser');
+                if (tu && (u.name || u.email)) tu.textContent = u.name || u.email;
+            } catch (e) {}
             // Stop login music when app loads
             stopLoginMusic();
         }
@@ -8298,6 +8399,21 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
             if (tab === 'unanswered') { loadUnanswered(); loadUnansweredCount(); }
             if (tab === 'knowledgebase') loadKnowledgeBasePage();
             if (tab === 'commandcenter') loadCommandCenter();
+
+            // Sync top tab bar active state
+            try {
+                const map = {
+                    inbox: 'topTabInbox',
+                    commandcenter: 'topTabCommandCenter',
+                    analytics: 'topTabAnalytics',
+                    settings: 'topTabSettings',
+                    feedback: 'topTabFeedback',
+                };
+                document.querySelectorAll('.top-tab-bar .ttb-tab').forEach(b => b.classList.remove('active'));
+                const targetId = map[tab] || 'topTabInbox';
+                const el = document.getElementById(targetId);
+                if (el) el.classList.add('active');
+            } catch (e) { /* top tabs may not be present yet */ }
         }
 
         // ===== VIEWS =====
