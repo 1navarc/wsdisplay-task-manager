@@ -1276,6 +1276,67 @@
             padding: 16px 20px;
         }
 
+        /* "View full" pop-out button on each message header */
+        .msg-popout-btn {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 3px 9px; font-size: 11px; font-weight: 600;
+            background: #f3f4f6; color: #374151;
+            border: 1px solid #e5e7eb; border-radius: 6px;
+            cursor: pointer; transition: all 0.15s ease;
+        }
+        .msg-popout-btn:hover { background: #6366f1; color: #fff; border-color: #6366f1; }
+        body.dark-mode .msg-popout-btn { background: #334155; color: #e2e8f0; border-color: #475569; }
+        body.dark-mode .msg-popout-btn:hover { background: #6366f1; color: #fff; border-color: #6366f1; }
+
+        /* Full-screen message reader overlay */
+        .msg-reader-overlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(15, 23, 42, 0.65);
+            z-index: 600;
+            align-items: stretch; justify-content: center;
+            padding: 24px;
+        }
+        .msg-reader-overlay.active { display: flex; }
+        .msg-reader-card {
+            background: #fff; border-radius: 14px;
+            width: 100%; max-width: 980px;
+            display: flex; flex-direction: column;
+            box-shadow: 0 30px 80px rgba(0,0,0,0.4);
+            overflow: hidden;
+        }
+        body.dark-mode .msg-reader-card { background: #1e293b; color: #e2e8f0; }
+        .msg-reader-header {
+            padding: 14px 20px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex; align-items: center; gap: 12px;
+            flex-shrink: 0;
+        }
+        body.dark-mode .msg-reader-header { border-bottom-color: #334155; }
+        .msg-reader-title { font-weight: 700; font-size: 15px; color: #0f172a; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        body.dark-mode .msg-reader-title { color: #e2e8f0; }
+        .msg-reader-meta { font-size: 12px; color: #64748b; margin-top: 2px; }
+        .msg-reader-close {
+            background: none; border: 0; cursor: pointer;
+            font-size: 24px; line-height: 1;
+            color: #64748b; padding: 4px 10px; border-radius: 6px;
+        }
+        .msg-reader-close:hover { background: #f3f4f6; color: #0f172a; }
+        body.dark-mode .msg-reader-close:hover { background: #334155; color: #e2e8f0; }
+        .msg-reader-body {
+            flex: 1 1 auto;
+            overflow-y: auto;
+            padding: 24px 32px;
+            font-size: 14.5px;
+            line-height: 1.7;
+            color: #1f2937;
+        }
+        body.dark-mode .msg-reader-body { color: #e2e8f0; }
+        .msg-reader-body img { max-width: 100%; height: auto; }
+        .msg-reader-body table { max-width: 100%; }
+        .msg-reader-body pre, .msg-reader-body code { white-space: pre-wrap; word-break: break-word; }
+        .msg-reader-body a { color: #6366f1; }
+
         .message-from {
             font-weight: 700;
             color: #111827;
@@ -5686,12 +5747,16 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
                                 </div>
                             </div>
                             <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                                <button class="msg-popout-btn" title="Open this message full-screen" onclick="event.stopPropagation(); openMessageFullscreen('${msg.id}')">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M21 3l-7 7"/><path d="M9 21H3v-6"/><path d="M3 21l7-7"/></svg>
+                                    View full
+                                </button>
                                 <span class="message-date">${dateStr}</span>
                                 <svg class="message-expand-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
                             </div>
                         </div>
-                        <div class="message-body-wrapper ${bodyWrapperClass}">
-                            <div class="message-body">${bodyHtml}</div>
+                        <div class="message-body-wrapper ${bodyWrapperClass}" data-msg-id="${msg.id}">
+                            <div class="message-body" data-msg-id="${msg.id}">${bodyHtml}</div>
                         </div>
                         ${aiTrainingButtons}
                         <div id="aiEditPanel-${msg.id}" style="display:none;"></div>
@@ -8594,6 +8659,56 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
             document.querySelectorAll('.middle-msg').forEach(card => {
                 card.style.display = '';
             });
+        }
+
+        // Open a single message in a full-screen reader so the user can scroll
+        // through the entire body without being squeezed by the reply pane below.
+        function openMessageFullscreen(msgId) {
+            const conv = window._currentConvData;
+            if (!conv) return;
+            const msg = (conv.messages || []).find(m => String(m.id) === String(msgId));
+            if (!msg) return;
+
+            let overlay = document.getElementById('msgReaderOverlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'msgReaderOverlay';
+                overlay.className = 'msg-reader-overlay';
+                overlay.innerHTML = `
+                    <div class="msg-reader-card" onclick="event.stopPropagation()">
+                        <div class="msg-reader-header">
+                            <div style="flex:1;min-width:0">
+                                <div class="msg-reader-title" id="msgReaderTitle"></div>
+                                <div class="msg-reader-meta" id="msgReaderMeta"></div>
+                            </div>
+                            <button class="msg-reader-close" onclick="closeMessageFullscreen()" title="Close (Esc)">×</button>
+                        </div>
+                        <div class="msg-reader-body" id="msgReaderBody"></div>
+                    </div>`;
+                overlay.onclick = (e) => { if (e.target === overlay) closeMessageFullscreen(); };
+                document.body.appendChild(overlay);
+            }
+
+            const subject = conv.subject || '(no subject)';
+            const senderName = msg.from_name || msg.from_email || 'Unknown';
+            const date = new Date(msg.sent_at).toLocaleString();
+            document.getElementById('msgReaderTitle').textContent = subject;
+            document.getElementById('msgReaderMeta').textContent = `From ${senderName} · ${msg.from_email || ''} · ${date}`;
+            document.getElementById('msgReaderBody').innerHTML = msg.body_html || escapeHtml(msg.body_text || '');
+            overlay.classList.add('active');
+            // Reset scroll to top
+            document.getElementById('msgReaderBody').scrollTop = 0;
+            // Esc closes
+            document.addEventListener('keydown', _msgReaderEscHandler);
+        }
+
+        function closeMessageFullscreen() {
+            const overlay = document.getElementById('msgReaderOverlay');
+            if (overlay) overlay.classList.remove('active');
+            document.removeEventListener('keydown', _msgReaderEscHandler);
+        }
+        function _msgReaderEscHandler(e) {
+            if (e.key === 'Escape') closeMessageFullscreen();
         }
 
         function escapeHtml(text) {
