@@ -4535,6 +4535,196 @@
             }
         }
 
+        /* ============================================================ */
+        /* COMMAND CENTER — ALWAYS-ON DARK FUTURISTIC RESTYLE            */
+        /* Scoped to .cc-container so it overrides regardless of body    */
+        /* dark-mode toggle. Defined LAST in the stylesheet so it wins.  */
+        /* ============================================================ */
+        .cc-container {
+            background:
+                radial-gradient(ellipse 1200px 600px at 18% -10%, rgba(99,102,241,0.22), transparent 60%),
+                radial-gradient(ellipse 1100px 700px at 95% 110%, rgba(168,85,247,0.18), transparent 60%),
+                radial-gradient(ellipse 800px 500px at 100% 18%, rgba(236,72,153,0.12), transparent 65%),
+                linear-gradient(180deg, #06091a 0%, #0a0e23 35%, #10142e 70%, #0a0e23 100%) !important;
+            color: #e8ebf7 !important;
+        }
+        .cc-container::before {
+            content: '';
+            position: fixed;
+            top: 40px; left: 0; right: 0; bottom: 0;
+            background-image:
+                radial-gradient(circle at 20% 30%, rgba(255,255,255,0.04) 1px, transparent 1px),
+                radial-gradient(circle at 70% 80%, rgba(255,255,255,0.03) 1px, transparent 1px),
+                radial-gradient(circle at 40% 60%, rgba(255,255,255,0.02) 1px, transparent 1px);
+            background-size: 80px 80px, 110px 110px, 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .cc-container > * { position: relative; z-index: 1; }
+
+        .cc-container .cc-title {
+            background: linear-gradient(135deg, #a78bfa 0%, #f472b6 50%, #60a5fa 100%) !important;
+            -webkit-background-clip: text !important;
+            background-clip: text !important;
+            color: transparent !important;
+            text-shadow: 0 0 30px rgba(167,139,250,0.3);
+        }
+        .cc-container .cc-subtitle { color: #8b93b8 !important; }
+        .cc-container .cc-back-btn {
+            background: rgba(30,35,70,0.6) !important;
+            border: 1px solid rgba(99,102,241,0.3) !important;
+            color: #c7d2fe !important;
+            backdrop-filter: blur(10px);
+        }
+        .cc-container .cc-back-btn:hover {
+            background: rgba(99,102,241,0.2) !important;
+            border-color: rgba(99,102,241,0.6) !important;
+        }
+
+        /* KPI cards — glowing edge, big white numbers */
+        .cc-container .cc-kpi {
+            background: linear-gradient(145deg, rgba(20,25,55,0.85), rgba(15,20,45,0.85)) !important;
+            border: 1px solid rgba(99,102,241,0.25) !important;
+            box-shadow:
+                0 1px 0 rgba(255,255,255,0.05) inset,
+                0 8px 32px rgba(0,0,0,0.4),
+                0 0 40px rgba(99,102,241,0.08) !important;
+            backdrop-filter: blur(10px);
+        }
+        .cc-container .cc-kpi:hover {
+            border-color: rgba(167,139,250,0.5) !important;
+            box-shadow:
+                0 1px 0 rgba(255,255,255,0.08) inset,
+                0 12px 40px rgba(0,0,0,0.5),
+                0 0 60px rgba(167,139,250,0.2) !important;
+            transform: translateY(-3px);
+        }
+        .cc-container .cc-kpi::before {
+            height: 2px !important;
+            background: linear-gradient(90deg, transparent, var(--kpi-accent, #a78bfa), transparent) !important;
+            box-shadow: 0 0 12px var(--kpi-accent, #a78bfa);
+        }
+        .cc-container .cc-kpi-label { color: #8b93b8 !important; }
+        .cc-container .cc-kpi-value {
+            color: #ffffff !important;
+            font-size: 38px !important;
+            text-shadow: 0 0 20px rgba(167,139,250,0.4);
+        }
+        .cc-container .cc-kpi-sub { color: #6b7299 !important; }
+        .cc-container .cc-kpi.clickable::after { color: rgba(199,210,254,0.4) !important; }
+        .cc-container .cc-kpi.clickable:hover::after { color: #a78bfa !important; }
+
+        /* Sections — dark glassy panels with neon edge */
+        .cc-container .cc-section {
+            background: linear-gradient(145deg, rgba(20,25,55,0.7), rgba(15,20,45,0.7)) !important;
+            border: 1px solid rgba(99,102,241,0.2) !important;
+            box-shadow:
+                0 1px 0 rgba(255,255,255,0.04) inset,
+                0 6px 24px rgba(0,0,0,0.35) !important;
+            backdrop-filter: blur(12px);
+            color: #e8ebf7 !important;
+        }
+        .cc-container .cc-section-title,
+        .cc-container .cc-section-header,
+        .cc-container .cc-section-header * { color: #f1f5f9 !important; }
+
+        /* Range pills */
+        .cc-container .cc-range-pill,
+        .cc-container .cc-range-btn {
+            background: rgba(30,35,70,0.6) !important;
+            border: 1px solid rgba(99,102,241,0.25) !important;
+            color: #c7d2fe !important;
+        }
+        .cc-container .cc-range-pill.active,
+        .cc-container .cc-range-btn.active {
+            background: linear-gradient(135deg, #6366f1, #a855f7) !important;
+            border-color: transparent !important;
+            color: #fff !important;
+            box-shadow: 0 0 16px rgba(99,102,241,0.5);
+        }
+
+        /* Customer 360 search box */
+        .cc-container input[type="text"],
+        .cc-container input[type="search"],
+        .cc-container input:not([type]),
+        .cc-container textarea,
+        .cc-container select {
+            background: rgba(10,15,40,0.6) !important;
+            border: 1px solid rgba(99,102,241,0.3) !important;
+            color: #e8ebf7 !important;
+        }
+        .cc-container input::placeholder,
+        .cc-container textarea::placeholder { color: #6b7299 !important; }
+        .cc-container input:focus,
+        .cc-container textarea:focus,
+        .cc-container select:focus {
+            border-color: rgba(167,139,250,0.6) !important;
+            box-shadow: 0 0 0 3px rgba(167,139,250,0.15) !important;
+            outline: none !important;
+        }
+
+        /* Buttons inside CC */
+        .cc-container .cc-btn,
+        .cc-container button:not([class*="resolve"]):not([class*="dismiss"]):not([class*="snooze"]):not([class*="ghost"]) {
+            background: linear-gradient(135deg, #6366f1, #a855f7) !important;
+            border: 1px solid transparent !important;
+            color: #fff !important;
+        }
+        .cc-container .cc-btn.ghost,
+        .cc-container button.ghost {
+            background: rgba(30,35,70,0.6) !important;
+            border: 1px solid rgba(99,102,241,0.3) !important;
+            color: #c7d2fe !important;
+        }
+
+        /* Tables */
+        .cc-container table { color: #e8ebf7 !important; }
+        .cc-container th { color: #8b93b8 !important; border-bottom-color: rgba(99,102,241,0.2) !important; }
+        .cc-container td { border-color: rgba(99,102,241,0.1) !important; }
+        .cc-container tr:hover td { background: rgba(99,102,241,0.08) !important; }
+
+        /* Force-override inline white backgrounds anywhere inside CC.
+           The Today gradient cards and Items-needing-attention list use
+           inline style="background:#fff..." which beats any class rules. */
+        .cc-container [style*="background:#fff"],
+        .cc-container [style*="background: #fff"],
+        .cc-container [style*="background:#ffffff"],
+        .cc-container [style*="background-color:#fff"],
+        .cc-container [style*="background:white"] {
+            background: linear-gradient(145deg, rgba(20,25,55,0.85), rgba(15,20,45,0.85)) !important;
+            border-color: rgba(99,102,241,0.25) !important;
+            color: #e8ebf7 !important;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.35) !important;
+        }
+        .cc-container [style*="background:#f8fafc"],
+        .cc-container [style*="background:#f1f5f9"],
+        .cc-container [style*="background:#f9fafb"],
+        .cc-container [style*="background:#f3f4f6"] {
+            background: rgba(15,20,45,0.5) !important;
+            color: #e8ebf7 !important;
+        }
+        /* Inline dark-text rules need to be lifted to light too */
+        .cc-container [style*="color:#0f172a"],
+        .cc-container [style*="color:#111827"],
+        .cc-container [style*="color:#1f2937"],
+        .cc-container [style*="color:#374151"],
+        .cc-container [style*="color:#1e293b"] {
+            color: #e8ebf7 !important;
+        }
+        .cc-container [style*="color:#6b7280"],
+        .cc-container [style*="color:#64748b"],
+        .cc-container [style*="color:#475569"],
+        .cc-container [style*="color:#9ca3af"] {
+            color: #8b93b8 !important;
+        }
+
+        /* The "Today · Firefights" gradient KPI cards already have great
+           gradient backgrounds — keep them, but lift them off the dark bg
+           with a glow halo so they pop. */
+        .cc-container [style*="linear-gradient"][style*="border-radius"] {
+            box-shadow: 0 8px 32px rgba(0,0,0,0.45), 0 0 40px rgba(167,139,250,0.15) !important;
+        }
+
     </style>
 
 <script>
