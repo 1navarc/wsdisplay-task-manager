@@ -13436,6 +13436,7 @@ async function loadCommandCenter() {
     ccLoadPatterns();    // lazy — AI calls, will resolve later
     ccLoadAnomalies();   // lazy
     ccLoadConfig();      // SLA threshold + snoozes
+    ccArchiveLoadStatus(); // archive tiles + progress bar
 }
 
 function ccShellHtml() {
@@ -13492,6 +13493,21 @@ function ccShellHtml() {
                 </div>
             </div>
         </div>
+
+        <!-- Email Archive progress bar (sticky, only shows while runs are active) -->
+        <div id="ccArchiveBar" style="display:none;position:sticky;top:0;z-index:50;background:linear-gradient(135deg,#0ea5e9,#6366f1);color:#fff;border-radius:12px;padding:14px 18px;margin:0 0 16px 0;box-shadow:0 8px 24px rgba(99,102,241,.25)">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+                <div style="font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px">
+                    <span class="cc-pulse" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#fff;animation:ccPulse 1.4s ease-in-out infinite"></span>
+                    <span id="ccArchiveBarTitle">Email archive working…</span>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center">
+                    <button class="cc-btn ghost sm" style="background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.3)" onclick="ccArchiveOpenPanel()">Details</button>
+                </div>
+            </div>
+            <div id="ccArchiveBarRows" style="margin-top:10px;display:flex;flex-direction:column;gap:6px;font-size:12.5px"></div>
+        </div>
+        <style>@keyframes ccPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.4)}}</style>
 
         <!-- KPI row -->
         <div class="cc-kpi-row" id="ccKpiRow">
@@ -13566,6 +13582,72 @@ function ccShellHtml() {
                 </div>
             </div>
             <div id="ccNotesList"></div>
+        </div>
+
+        <!-- Email Archive: search across years of email history -->
+        <div class="cc-section" id="ccArchiveSection">
+            <div class="cc-section-header" style="flex-wrap:wrap;gap:8px">
+                <div>
+                    <div class="cc-section-title">🗄️ Email Archive</div>
+                    <div class="cc-section-desc" id="ccArchiveSubtitle">Search across all stored email · multi-mailbox</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <button class="cc-btn ghost sm" onclick="ccArchiveLoadStatus()">↻ Refresh</button>
+                    <button class="cc-btn ghost sm" onclick="ccArchiveStartBackfillPrompt()">Start backfill…</button>
+                    <button class="cc-btn ghost sm" onclick="ccArchiveSyncNow()">Sync now</button>
+                </div>
+            </div>
+
+            <!-- Per-mailbox status tiles -->
+            <div id="ccArchiveMailboxTiles" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:14px">
+                <div class="cc-skeleton" style="height:80px"></div>
+            </div>
+
+            <!-- Search controls -->
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:12px">
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+                    <input type="text" id="ccArchiveQ" placeholder="Search subject + body (e.g. 'banner stand wrinkled')…" style="flex:1;min-width:260px;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px"
+                        onkeydown="if(event.key==='Enter')ccArchiveSearch()" />
+                    <button class="cc-btn sm" onclick="ccArchiveSearch()">Search</button>
+                    <button class="cc-btn ghost sm" onclick="ccArchiveAiSearch()" title="Semantic AI search across embedded emails">✨ AI Search</button>
+                    <button class="cc-btn ghost sm" onclick="ccArchiveOpenEmbedDialog()" title="Pre-embed the current filtered slice for instant semantic search">Embed slice…</button>
+                    <button class="cc-btn ghost sm" onclick="ccArchiveExportCsv()">⬇ CSV</button>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:13px">
+                    <span style="color:#64748b;font-weight:600">Filters:</span>
+                    <label style="display:inline-flex;align-items:center;gap:6px">
+                        Mailbox
+                        <select id="ccArchiveMailboxFilter" multiple size="1" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;min-width:180px;height:32px"></select>
+                    </label>
+                    <label>From <input type="date" id="ccArchiveFrom" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px"/></label>
+                    <label>To <input type="date" id="ccArchiveTo" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px"/></label>
+                    <label>Customer <input type="text" id="ccArchiveCustomer" placeholder="email or @domain" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;width:180px"/></label>
+                    <label>Rep
+                        <select id="ccArchiveRep" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;min-width:140px"><option value="">— any —</option></select>
+                    </label>
+                    <label>Label
+                        <select id="ccArchiveLabel" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;min-width:140px"><option value="">— any —</option></select>
+                    </label>
+                    <label>Direction
+                        <select id="ccArchiveDirection" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">
+                            <option value="">any</option>
+                            <option value="inbound">inbound</option>
+                            <option value="outbound">outbound</option>
+                        </select>
+                    </label>
+                    <label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="ccArchiveAttach"> has attachment</label>
+                    <button class="cc-btn ghost sm" onclick="ccArchiveResetFilters()">Reset</button>
+                    <button class="cc-btn ghost sm" onclick="ccArchiveSavePrompt()">★ Save filter</button>
+                </div>
+                <!-- Saved filters strip -->
+                <div id="ccArchiveSavedStrip" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px"></div>
+            </div>
+
+            <!-- Results header (count + view toggle + bulk actions) -->
+            <div id="ccArchiveResultsHeader" style="display:none;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:13px;color:#475569"></div>
+
+            <!-- Results -->
+            <div id="ccArchiveResults"></div>
         </div>
 
         <!-- Quick Config: SLA threshold + Alert snoozes -->
@@ -14474,6 +14556,464 @@ async function ccRemoveSnooze(id) {
 
 function escapeHtmlLocal(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// =============================================================================
+// EMAIL ARCHIVE
+// Multi-mailbox search with sticky progress bar, AI search, embed-slice, etc.
+// =============================================================================
+
+const _ccArchive = {
+    status: null,         // /status response
+    facets: null,         // /facets response
+    pollTimer: null,
+    lastResults: null,
+    lastSearchKind: 'keyword', // 'keyword' | 'ai'
+    savedFilters: [],
+};
+
+function ccArchiveCurrentFilters() {
+    const mb = Array.from(document.getElementById('ccArchiveMailboxFilter').selectedOptions).map(o => o.value).filter(Boolean);
+    const customer = (document.getElementById('ccArchiveCustomer').value || '').trim();
+    const customer_email = customer && !customer.startsWith('@') ? customer : null;
+    const customer_domain = customer.startsWith('@') ? customer.slice(1) : null;
+    return {
+        q: (document.getElementById('ccArchiveQ').value || '').trim() || undefined,
+        mailboxes: mb.length ? mb : undefined,
+        from: document.getElementById('ccArchiveFrom').value || undefined,
+        to: document.getElementById('ccArchiveTo').value || undefined,
+        customer_email: customer_email || undefined,
+        customer_domain: customer_domain || undefined,
+        rep_email: document.getElementById('ccArchiveRep').value || undefined,
+        label_name: document.getElementById('ccArchiveLabel').value || undefined,
+        direction: document.getElementById('ccArchiveDirection').value || undefined,
+        has_attachment: document.getElementById('ccArchiveAttach').checked ? 'true' : undefined,
+    };
+}
+
+function ccArchiveResetFilters() {
+    document.getElementById('ccArchiveQ').value = '';
+    document.getElementById('ccArchiveFrom').value = '';
+    document.getElementById('ccArchiveTo').value = '';
+    document.getElementById('ccArchiveCustomer').value = '';
+    document.getElementById('ccArchiveRep').value = '';
+    document.getElementById('ccArchiveLabel').value = '';
+    document.getElementById('ccArchiveDirection').value = '';
+    document.getElementById('ccArchiveAttach').checked = false;
+    Array.from(document.getElementById('ccArchiveMailboxFilter').options).forEach(o => o.selected = false);
+    document.getElementById('ccArchiveResults').innerHTML = '';
+    document.getElementById('ccArchiveResultsHeader').style.display = 'none';
+}
+
+async function ccArchiveLoadStatus() {
+    try {
+        const r = await fetch('/api/archive/status', { credentials: 'include' });
+        if (!r.ok) throw new Error('status fetch failed');
+        const data = await r.json();
+        _ccArchive.status = data;
+        ccArchiveRenderTiles(data.mailboxes || []);
+        ccArchiveRenderProgressBar(data.active_runs || []);
+        ccArchiveLoadFacets();
+        ccArchiveLoadSavedFilters();
+    } catch (e) {
+        console.warn('archive status:', e);
+    }
+}
+
+function ccArchiveRenderTiles(mailboxes) {
+    const el = document.getElementById('ccArchiveMailboxTiles');
+    if (!el) return;
+    if (!mailboxes.length) {
+        el.innerHTML = '<div style="color:#94a3b8;font-size:13px">No mailboxes configured.</div>';
+        return;
+    }
+    el.innerHTML = mailboxes.map(m => {
+        const status = m.is_connected
+          ? (m.backfill_completed_at
+              ? `<span style="color:#16a34a;font-weight:600">✓ Archived</span>`
+              : `<span style="color:#f59e0b;font-weight:600">⏳ Backfilling</span>`)
+          : `<span style="color:#dc2626;font-weight:600">⚠ Not connected</span>`;
+        const counts = m.total_messages_archived
+          ? `${(m.total_threads_archived||0).toLocaleString()} threads · ${(m.total_messages_archived||0).toLocaleString()} msgs`
+          : 'no data yet';
+        const range = (m.earliest_archived_at && m.latest_archived_at)
+          ? `${new Date(m.earliest_archived_at).toLocaleDateString()} → ${new Date(m.latest_archived_at).toLocaleDateString()}`
+          : '—';
+        const lastSync = m.last_synced_at ? `synced ${new Date(m.last_synced_at).toLocaleString()}` : 'never synced';
+        return `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px">
+            <div style="font-weight:700;font-size:13px;color:#0f172a">${escapeHtmlLocal(m.mailbox_email)}</div>
+            <div style="font-size:11.5px;margin-top:4px">${status}</div>
+            <div style="font-size:11.5px;color:#64748b;margin-top:4px">${counts}</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:2px">${range}</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:2px">${lastSync}</div>
+        </div>`;
+    }).join('');
+}
+
+function ccArchiveRenderProgressBar(activeRuns) {
+    const bar = document.getElementById('ccArchiveBar');
+    const rowsEl = document.getElementById('ccArchiveBarRows');
+    const titleEl = document.getElementById('ccArchiveBarTitle');
+    const running = (activeRuns || []).filter(r => r.status === 'running');
+    if (!running.length) {
+        bar.style.display = 'none';
+        if (_ccArchive.pollTimer) { clearInterval(_ccArchive.pollTimer); _ccArchive.pollTimer = null; }
+        return;
+    }
+    bar.style.display = 'block';
+    titleEl.textContent = running.length === 1
+        ? `Email archive: ${running[0].run_type === 'backfill' ? 'backfilling' : running[0].run_type} ${running[0].mailbox_email}…`
+        : `Email archive: ${running.length} jobs running`;
+    rowsEl.innerHTML = running.map(r => {
+        const pct = Math.min(100, Math.max(0, Number(r.progress_percent || 0)));
+        const eta = r.eta_seconds != null ? ccFmtEta(r.eta_seconds) : '';
+        const counts = r.total_threads
+            ? ` · ${r.processed_count || 0}/${r.total_threads}`
+            : '';
+        return `<div>
+            <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:3px">
+                <span style="opacity:.95">${escapeHtmlLocal(r.mailbox_email)} · ${escapeHtmlLocal(r.run_type)}${counts}${eta?' · ETA '+eta:''}</span>
+                <span style="opacity:.85">${pct.toFixed(1)}%</span>
+            </div>
+            <div style="background:rgba(255,255,255,.18);height:8px;border-radius:6px;overflow:hidden">
+                <div style="height:100%;width:${pct}%;background:#fff;transition:width .3s ease"></div>
+            </div>
+            <div style="font-size:11px;opacity:.85;margin-top:3px">${escapeHtmlLocal(r.current_status_line || '')}</div>
+        </div>`;
+    }).join('');
+
+    // Start polling if not already
+    if (!_ccArchive.pollTimer) {
+        _ccArchive.pollTimer = setInterval(() => ccArchiveLoadStatus(), 5000);
+    }
+}
+
+function ccFmtEta(s) {
+    if (s == null) return '';
+    if (s < 60) return s + 's';
+    if (s < 3600) return Math.round(s/60) + 'm';
+    const h = Math.floor(s/3600);
+    const m = Math.round((s%3600)/60);
+    return h + 'h' + (m ? ' ' + m + 'm' : '');
+}
+
+async function ccArchiveLoadFacets() {
+    try {
+        const r = await fetch('/api/archive/facets', { credentials: 'include' });
+        if (!r.ok) return;
+        const data = await r.json();
+        _ccArchive.facets = data;
+        // Mailbox multi-select
+        const mbSel = document.getElementById('ccArchiveMailboxFilter');
+        const prev = Array.from(mbSel.selectedOptions).map(o => o.value);
+        mbSel.innerHTML = (data.mailboxes || []).map(m =>
+            `<option value="${escapeHtmlLocal(m.mailbox_email)}" ${prev.includes(m.mailbox_email)?'selected':''}>${escapeHtmlLocal(m.mailbox_email)} (${m.n})</option>`
+        ).join('');
+        mbSel.size = Math.min(4, Math.max(2, (data.mailboxes||[]).length));
+        // Reps
+        const repSel = document.getElementById('ccArchiveRep');
+        const prevRep = repSel.value;
+        repSel.innerHTML = '<option value="">— any —</option>' + (data.reps || []).map(r =>
+            `<option value="${escapeHtmlLocal(r.rep_email)}" ${prevRep===r.rep_email?'selected':''}>${escapeHtmlLocal(r.rep_name || r.rep_email)} (${r.n})</option>`
+        ).join('');
+        // Labels
+        const lblSel = document.getElementById('ccArchiveLabel');
+        const prevLbl = lblSel.value;
+        lblSel.innerHTML = '<option value="">— any —</option>' + (data.labels || []).slice(0, 60).map(l =>
+            `<option value="${escapeHtmlLocal(l.lname)}" ${prevLbl===l.lname?'selected':''}>${escapeHtmlLocal(l.lname)} (${l.n})</option>`
+        ).join('');
+    } catch (e) { /* silent */ }
+}
+
+async function ccArchiveLoadSavedFilters() {
+    try {
+        const r = await fetch('/api/archive/filters', { credentials: 'include' });
+        if (!r.ok) return;
+        const data = await r.json();
+        _ccArchive.savedFilters = data.filters || [];
+        const strip = document.getElementById('ccArchiveSavedStrip');
+        if (!strip) return;
+        if (!_ccArchive.savedFilters.length) { strip.innerHTML = ''; return; }
+        strip.innerHTML = _ccArchive.savedFilters.map(f =>
+            `<button class="cc-btn ghost sm" style="font-size:11.5px;padding:4px 10px" onclick="ccArchiveApplySaved('${f.id}')" title="Click to apply">★ ${escapeHtmlLocal(f.name)}</button>
+             <button class="cc-btn ghost sm" style="font-size:11px;padding:4px 6px;color:#94a3b8" onclick="ccArchiveDeleteSaved('${f.id}', event)" title="Delete">×</button>`
+        ).join(' ');
+    } catch (e) { /* silent */ }
+}
+
+function ccArchiveApplySaved(id) {
+    const f = _ccArchive.savedFilters.find(x => x.id === id);
+    if (!f) return;
+    const fj = f.filter_json || {};
+    document.getElementById('ccArchiveQ').value = fj.q || '';
+    document.getElementById('ccArchiveFrom').value = fj.from || '';
+    document.getElementById('ccArchiveTo').value = fj.to || '';
+    document.getElementById('ccArchiveCustomer').value = fj.customer_email || (fj.customer_domain ? '@' + fj.customer_domain : '') || '';
+    document.getElementById('ccArchiveRep').value = fj.rep_email || '';
+    document.getElementById('ccArchiveLabel').value = fj.label_name || '';
+    document.getElementById('ccArchiveDirection').value = fj.direction || '';
+    document.getElementById('ccArchiveAttach').checked = !!(fj.has_attachment === 'true' || fj.has_attachment === true);
+    Array.from(document.getElementById('ccArchiveMailboxFilter').options).forEach(o => {
+        o.selected = !!(fj.mailboxes && fj.mailboxes.includes(o.value));
+    });
+    ccArchiveSearch();
+}
+
+async function ccArchiveDeleteSaved(id, ev) {
+    if (ev) ev.stopPropagation();
+    if (!confirm('Delete saved filter?')) return;
+    await fetch('/api/archive/filters/' + id, { method: 'DELETE', credentials: 'include' });
+    ccArchiveLoadSavedFilters();
+}
+
+async function ccArchiveSavePrompt() {
+    const name = prompt('Save current filter as:');
+    if (!name || !name.trim()) return;
+    const filter_json = ccArchiveCurrentFilters();
+    const r = await fetch('/api/archive/filters', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), filter_json }),
+    });
+    if (r.ok) { settingsToast('Filter saved', 'success'); ccArchiveLoadSavedFilters(); }
+    else settingsToast('Save failed', 'error');
+}
+
+async function ccArchiveSearch() {
+    _ccArchive.lastSearchKind = 'keyword';
+    const f = ccArchiveCurrentFilters();
+    const params = new URLSearchParams();
+    Object.entries(f).forEach(([k,v]) => {
+        if (v == null) return;
+        if (Array.isArray(v)) params.set(k, v.join(','));
+        else params.set(k, v);
+    });
+    params.set('limit', '50');
+    const resultsEl = document.getElementById('ccArchiveResults');
+    resultsEl.innerHTML = '<div class="cc-skeleton" style="height:60px"></div>';
+    try {
+        const r = await fetch('/api/archive/search?' + params.toString(), { credentials: 'include' });
+        if (!r.ok) throw new Error('search failed');
+        const data = await r.json();
+        _ccArchive.lastResults = data;
+        ccArchiveRenderResults(data, 'keyword');
+    } catch (e) {
+        resultsEl.innerHTML = `<div style="color:#b91c1c;font-size:13px">Search failed: ${escapeHtmlLocal(e.message)}</div>`;
+    }
+}
+
+async function ccArchiveAiSearch() {
+    const q = (document.getElementById('ccArchiveQ').value || '').trim();
+    if (!q) { settingsToast('Type a question first', 'error'); return; }
+    _ccArchive.lastSearchKind = 'ai';
+    const filters = ccArchiveCurrentFilters();
+    delete filters.q; // AI uses query separately
+    const resultsEl = document.getElementById('ccArchiveResults');
+    resultsEl.innerHTML = `<div style="font-size:13px;color:#64748b;padding:12px">✨ AI Search… (this is checking embedded emails matching your filter)</div>`;
+    try {
+        const r = await fetch('/api/archive/ai-search', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: q, filters, limit: 50 }),
+        });
+        if (!r.ok) throw new Error('AI search failed');
+        const data = await r.json();
+        if (data.error) {
+            resultsEl.innerHTML = `<div style="color:#b91c1c;font-size:13px">${escapeHtmlLocal(data.error)}</div>`;
+            return;
+        }
+        if (!data.rows || !data.rows.length) {
+            resultsEl.innerHTML = `<div style="color:#64748b;font-size:13px;padding:12px;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px">
+                No semantic matches. Either nothing matches, or this slice has not been embedded yet.
+                Click "Embed slice…" to embed your current filter, then try AI Search again.
+            </div>`;
+            return;
+        }
+        ccArchiveRenderResults({ rows: data.rows, total: data.rows.length, group_by_thread: false }, 'ai');
+    } catch (e) {
+        resultsEl.innerHTML = `<div style="color:#b91c1c;font-size:13px">AI search failed: ${escapeHtmlLocal(e.message)}</div>`;
+    }
+}
+
+function ccArchiveRenderResults(data, kind) {
+    const resultsEl = document.getElementById('ccArchiveResults');
+    const headerEl = document.getElementById('ccArchiveResultsHeader');
+    const rows = data.rows || [];
+    headerEl.style.display = 'flex';
+    headerEl.innerHTML = `<div>${kind === 'ai' ? '✨ AI ' : ''}<b>${(data.total || rows.length).toLocaleString()}</b> ${data.group_by_thread !== false && kind!=='ai' ? 'threads' : 'messages'}</div>
+        <div style="display:flex;gap:6px">
+            <button class="cc-btn ghost sm" onclick="ccArchiveExportCsv()">⬇ Export CSV</button>
+        </div>`;
+    if (!rows.length) {
+        resultsEl.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:12px">No results.</div>';
+        return;
+    }
+    resultsEl.innerHTML = rows.map(r => {
+        if (kind === 'ai' || data.group_by_thread === false) {
+            // message-level row
+            const sub = escapeHtmlLocal(r.subject || '(no subject)');
+            const sim = r.similarity != null ? `<span style="background:#e0e7ff;color:#3730a3;padding:2px 6px;border-radius:4px;font-size:10.5px;font-weight:600;margin-left:6px">${(r.similarity*100).toFixed(0)}% match</span>` : '';
+            return `<div onclick="ccArchiveOpenThread('${r.thread_id || r.gmail_thread_id}')" style="cursor:pointer;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;gap:10px;align-items:flex-start" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#fff'">
+                <div style="flex:1;min-width:0">
+                    <div style="font-weight:600;font-size:13px;color:#0f172a">${sub}${sim}</div>
+                    <div style="font-size:11.5px;color:#64748b;margin-top:2px">${escapeHtmlLocal(r.from_name||r.from_email||'')} → ${escapeHtmlLocal(r.mailbox_email)} · ${escapeHtmlLocal(r.customer_email||'')}${r.rep_name?' · rep: '+escapeHtmlLocal(r.rep_name):''}</div>
+                    <div style="font-size:11.5px;color:#475569;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtmlLocal((r.snippet||'').slice(0,200))}</div>
+                </div>
+                <div style="font-size:11px;color:#94a3b8;white-space:nowrap">${r.sent_at ? new Date(r.sent_at).toLocaleDateString() : ''}</div>
+            </div>`;
+        } else {
+            // thread-level row
+            const sub = escapeHtmlLocal(r.subject || '(no subject)');
+            return `<div onclick="ccArchiveOpenThread('${r.thread_id}')" style="cursor:pointer;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;gap:10px;align-items:flex-start" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#fff'">
+                <div style="flex:1;min-width:0">
+                    <div style="font-weight:600;font-size:13px;color:#0f172a">${sub}<span style="background:#e2e8f0;color:#475569;padding:1px 6px;border-radius:4px;font-size:10.5px;margin-left:6px">${r.message_count||1}</span></div>
+                    <div style="font-size:11.5px;color:#64748b;margin-top:2px">📬 ${escapeHtmlLocal(r.mailbox_email)} · 👤 ${escapeHtmlLocal(r.customer_email||'(internal)')}${r.rep_emails && r.rep_emails.length ? ' · 🧑‍💼 '+escapeHtmlLocal(r.rep_emails.join(', ')) : ''}</div>
+                    <div style="font-size:11.5px;color:#475569;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtmlLocal((r.latest_snippet||'').slice(0,200))}</div>
+                </div>
+                <div style="font-size:11px;color:#94a3b8;white-space:nowrap;text-align:right">
+                    <div>${r.last_msg_at ? new Date(r.last_msg_at).toLocaleDateString() : ''}</div>
+                    ${r.has_attachment ? '<div>📎</div>' : ''}
+                </div>
+            </div>`;
+        }
+    }).join('');
+}
+
+async function ccArchiveOpenThread(idOrGid) {
+    const modal = document.getElementById('ccModal');
+    const titleEl = document.getElementById('ccModalTitle');
+    const bodyEl = document.getElementById('ccModalBody');
+    titleEl.textContent = 'Loading thread…';
+    bodyEl.innerHTML = '<div class="cc-skeleton" style="height:120px"></div>';
+    modal.classList.add('open');
+    modal.style.display = 'flex';
+    try {
+        const r = await fetch('/api/archive/thread/' + encodeURIComponent(idOrGid), { credentials: 'include' });
+        if (!r.ok) throw new Error('load failed');
+        const data = await r.json();
+        const t = data.thread;
+        titleEl.textContent = t.subject || '(no subject)';
+        const msgs = (data.messages || []).map((m, i) => {
+            const ts = m.sent_at ? new Date(m.sent_at).toLocaleString() : '';
+            const dirIcon = m.direction === 'outbound' ? '↗' : (m.direction === 'inbound' ? '↘' : '·');
+            const fromLine = `${dirIcon} <b>${escapeHtmlLocal(m.from_name || m.from_email || '?')}</b> &lt;${escapeHtmlLocal(m.from_email||'')}&gt;`;
+            const toLine = (m.to_emails||[]).length ? `<div style="font-size:11px;color:#64748b">to ${escapeHtmlLocal((m.to_emails||[]).join(', '))}</div>` : '';
+            const repLine = m.rep_name ? `<div style="font-size:11px;color:#64748b">rep: ${escapeHtmlLocal(m.rep_name)}</div>` : '';
+            const body = (m.body_text_clean || m.body_text_full || '').slice(0, 6000);
+            return `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px;background:${m.direction==='outbound'?'#f0f9ff':'#fff'}">
+                <div style="display:flex;justify-content:space-between;gap:10px">
+                    <div>${fromLine}${toLine}${repLine}</div>
+                    <div style="font-size:11px;color:#94a3b8;white-space:nowrap">${ts}</div>
+                </div>
+                <div style="font-size:13px;color:#0f172a;margin-top:8px;white-space:pre-wrap">${escapeHtmlLocal(body)}</div>
+                ${m.body_text_full && m.body_text_full !== m.body_text_clean ? `<div style="margin-top:6px"><button class="cc-btn ghost sm" style="font-size:11px" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Show quoted history</button><div style="display:none;margin-top:6px;font-size:12px;color:#64748b;white-space:pre-wrap;border-top:1px dashed #cbd5e1;padding-top:6px">${escapeHtmlLocal(m.body_text_full)}</div></div>` : ''}
+            </div>`;
+        }).join('');
+        const gmailLink = `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(t.gmail_thread_id)}`;
+        bodyEl.innerHTML = `
+            <div style="font-size:12px;color:#64748b;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #e2e8f0">
+                📬 ${escapeHtmlLocal(t.mailbox_email)} · 👤 ${escapeHtmlLocal(t.customer_email||'(internal)')} · ${t.message_count||0} msgs
+                · <a href="${gmailLink}" target="_blank" rel="noopener" style="color:#0ea5e9">Open in Gmail ↗</a>
+            </div>
+            ${msgs}`;
+    } catch (e) {
+        bodyEl.innerHTML = `<div style="color:#b91c1c">Failed: ${escapeHtmlLocal(e.message)}</div>`;
+    }
+}
+
+async function ccArchiveExportCsv() {
+    const f = ccArchiveCurrentFilters();
+    const params = new URLSearchParams();
+    Object.entries(f).forEach(([k,v]) => { if (v != null) params.set(k, Array.isArray(v) ? v.join(',') : v); });
+    params.set('limit', '5000');
+    window.location = '/api/archive/export.csv?' + params.toString();
+}
+
+async function ccArchiveOpenEmbedDialog() {
+    const filters = ccArchiveCurrentFilters();
+    const params = new URLSearchParams({ filters: JSON.stringify(filters) });
+    try {
+        const [estR, covR] = await Promise.all([
+            fetch('/api/archive/embed/estimate?' + params.toString(), { credentials: 'include' }),
+            fetch('/api/archive/embed/coverage?' + params.toString(), { credentials: 'include' }),
+        ]);
+        if (!estR.ok) throw new Error('estimate failed');
+        const est = await estR.json();
+        const cov = covR.ok ? await covR.json() : { total: 0, embedded: 0 };
+        const msg = `Embed slice for instant AI search
+
+Slice covers ${cov.total.toLocaleString()} messages.
+Already embedded: ${cov.embedded.toLocaleString()}.
+To embed (new): ${est.message_count.toLocaleString()} messages.
+
+Approx tokens: ${est.estimated_tokens.toLocaleString()}
+Estimated cost: $${est.estimated_cost_usd.toFixed(4)}
+Model: ${est.model}
+
+Proceed?`;
+        if (!confirm(msg)) return;
+        const r = await fetch('/api/archive/embed/run', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filters }),
+        });
+        if (!r.ok) throw new Error('run failed');
+        settingsToast('Embedding started — watch the progress bar', 'success');
+        ccArchiveLoadStatus();
+    } catch (e) {
+        settingsToast('Embed failed: ' + e.message, 'error');
+    }
+}
+
+async function ccArchiveStartBackfillPrompt() {
+    if (!_ccArchive.status || !_ccArchive.status.mailboxes) {
+        await ccArchiveLoadStatus();
+    }
+    const opts = (_ccArchive.status?.mailboxes || []).map((m,i) => `${i+1}. ${m.mailbox_email}${m.is_connected?'':' (NOT CONNECTED)'}`).join('\n');
+    const which = prompt(`Start backfill for which mailbox?\n\n${opts}\nEnter number, or 'all':`, 'all');
+    if (!which) return;
+    const yearsStr = prompt('How many years back?', '2');
+    const years = parseFloat(yearsStr) || 2;
+    let body = { years };
+    if (which.trim().toLowerCase() !== 'all') {
+        const idx = parseInt(which.trim(), 10) - 1;
+        const mb = (_ccArchive.status?.mailboxes || [])[idx];
+        if (!mb) { settingsToast('Invalid choice', 'error'); return; }
+        body.mailbox_email = mb.mailbox_email;
+    }
+    try {
+        const r = await fetch('/api/archive/backfill', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!r.ok) throw new Error('start failed');
+        settingsToast('Backfill started — watch the progress bar', 'success');
+        ccArchiveLoadStatus();
+    } catch (e) {
+        settingsToast('Failed: ' + e.message, 'error');
+    }
+}
+
+async function ccArchiveSyncNow() {
+    try {
+        const r = await fetch('/api/archive/sync', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+        });
+        if (!r.ok) throw new Error('sync failed');
+        settingsToast('Delta sync started', 'success');
+        ccArchiveLoadStatus();
+    } catch (e) {
+        settingsToast('Failed: ' + e.message, 'error');
+    }
+}
+
+function ccArchiveOpenPanel() {
+    // Scroll to archive section
+    const el = document.getElementById('ccArchiveSection');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 </script>
 

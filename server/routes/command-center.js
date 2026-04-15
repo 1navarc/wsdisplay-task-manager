@@ -621,13 +621,24 @@ router.get('/patterns', requireAuth, requireManagerOrSupervisor, async (req, res
     const run = await getLatestCompletedRun(mailbox);
     if (!run) return res.json({ run: null, patterns: [] });
 
-    // Pull all flagged threads + category stats
+    // Pull flagged threads with their Gmail IDs so the AI can attribute
+    // each pattern cluster back to specific threads the user can click into.
     const flagsRow = await pool.query(
-      `SELECT thread_subject, reason, customer_email FROM email_metrics_flags
-        WHERE run_id = $1 AND thread_subject IS NOT NULL LIMIT 60`,
+      `SELECT gmail_thread_id, thread_subject, reason, customer_email, rep_email
+         FROM email_metrics_flags
+        WHERE run_id = $1 AND thread_subject IS NOT NULL
+        LIMIT 120`,
       [run.id]
     );
-    const subjects = flagsRow.rows.map(r => r.thread_subject).filter(Boolean);
+    const flagRows = flagsRow.rows.filter(r => r.thread_subject);
+    // index for fast lookup when resolving AI-returned indices -> thread ids
+    const indexed = flagRows.map((r, i) => ({
+      idx: i + 1,
+      gmail_thread_id: r.gmail_thread_id,
+      subject: r.thread_subject,
+      customer_email: r.customer_email,
+      rep_email: r.rep_email,
+    }));
     const categoryStats = asArray(run.category_stats);
 
     const { getGenAI } = require('../services/ai-service');
@@ -636,8 +647,8 @@ router.get('/patterns', requireAuth, requireManagerOrSupervisor, async (req, res
 
     const prompt = `You are analyzing customer-support email subjects for a daily operations digest.
 
-SUBJECTS FROM TODAY (${subjects.length} flagged threads):
-${subjects.slice(0, 60).map((s, i) => `${i+1}. ${s}`).join('\n')}
+SUBJECTS FROM TODAY (${indexed.length} flagged threads, numbered for reference):
+${indexed.map(r => `${r.idx}. ${r.subject}`).join('\n')}
 
 CATEGORIES:
 ${categoryStats.map(c => `- ${c.category}: ${c.count || 0} threads${c.angry_count ? ' ('+c.angry_count+' angry)' : ''}`).join('\n')}
@@ -646,10 +657,13 @@ Identify:
 1) REPEAT QUESTIONS — clusters of 2+ subjects that are clearly the same underlying customer question. For each, suggest a canned reply OR an FAQ entry.
 2) TRENDING TOPICS — keywords/themes that jump out as unusually frequent or new.
 
-Return strict JSON:
+Return strict JSON. For each cluster, include "indices" — the list of subject
+numbers from above that belong to that cluster. This lets us link the pattern
+back to the specific threads.
+
 {
-  "repeat_questions": [{"theme": "...", "example_subjects": ["..."], "suggested_canned_reply_topic": "...", "count": N}],
-  "trending_topics": [{"keyword": "...", "why_it_matters": "...", "example_subjects": ["..."]}]
+  "repeat_questions": [{"theme": "...", "indices": [1,4,9], "suggested_canned_reply_topic": "...", "count": N}],
+  "trending_topics": [{"keyword": "...", "indices": [2,7], "why_it_matters": "..."}]
 }
 
 If nothing noteworthy, return empty arrays. Be conservative — only surface genuine patterns.`;
@@ -660,9 +674,35 @@ If nothing noteworthy, return empty arrays. Be conservative — only surface gen
     let parsed;
     try { parsed = JSON.parse(jsonText); } catch(e) { parsed = { repeat_questions: [], trending_topics: [], raw: text }; }
 
+    // Resolve AI-returned indices -> thread records the UI can drill into.
+    const resolve = (indices) => {
+      if (!Array.isArray(indices)) return [];
+      return indices
+        .map(i => indexed[Number(i) - 1])
+        .filter(Boolean)
+        .map(r => ({
+          gmail_thread_id: r.gmail_thread_id,
+          thread_subject: r.subject,
+          customer_email: r.customer_email,
+          rep_email: r.rep_email,
+          severity: 'low', // pattern rows aren't alerts, just references
+        }));
+    };
+    const repeat_questions = (parsed.repeat_questions || []).map(r => ({
+      ...r,
+      threads: resolve(r.indices),
+      example_subjects: resolve(r.indices).map(t => t.thread_subject),
+    }));
+    const trending_topics = (parsed.trending_topics || []).map(t => ({
+      ...t,
+      threads: resolve(t.indices),
+      example_subjects: resolve(t.indices).map(x => x.thread_subject),
+    }));
+
     res.json({
       run: { id: run.id, completed_at: run.completed_at },
-      ...parsed,
+      repeat_questions,
+      trending_topics,
     });
   } catch (err) {
     console.error('patterns error:', err);

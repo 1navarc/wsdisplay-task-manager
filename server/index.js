@@ -105,6 +105,7 @@ app.use('/api/contacts', require('./routes/contacts'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/command-center', require('./routes/command-center'));
+app.use('/api/archive', require('./routes/archive'));
 
 // Gmail webhook
 app.post('/api/gmail/webhook', require('./routes/gmail-webhook'));
@@ -253,6 +254,37 @@ runMigrations(pool).then(async () => {
     initDailyReportScheduler();
   } catch (err) {
     console.error('Daily report scheduler init (non-fatal):', err.message);
+  }
+  // Email Archive: resume any orphaned runs from a prior server restart,
+  // then auto-start backfill (if configured) and schedule hourly delta sync.
+  try {
+    const archive = require('./services/email-archive');
+    // 1) Resume orphaned runs first
+    archive.resumeIncompleteRuns().catch(e => console.warn('archive resume:', e.message));
+    // 2) Hourly delta sync for every connected mailbox
+    cron.schedule('0 * * * *', async () => {
+      try {
+        const r = await archive.deltaSyncAll();
+        const total = r.reduce((acc, x) => acc + (x.newMessages || 0), 0);
+        if (total > 0) console.log(`[archive] hourly delta sync: ${total} new messages across mailboxes`);
+      } catch (e) {
+        console.warn('archive delta cron:', e.message);
+      }
+    });
+    // 3) Auto-start backfill once on startup if configured
+    setTimeout(async () => {
+      try {
+        const cfg = await archive.getConfig();
+        if (cfg.auto_start_backfill_on_deploy) {
+          console.log('[archive] auto-starting backfill on deploy');
+          await archive.backfillAll({ years: cfg.backfill_years });
+        }
+      } catch (e) {
+        console.warn('archive auto-start:', e.message);
+      }
+    }, 30_000); // wait 30s after boot to let DB warm up
+  } catch (err) {
+    console.error('Email archive init (non-fatal):', err.message);
   }
   server.listen(PORT, () => console.log('WSDisplay Email API running on port ' + PORT));
 }).catch(err => {
