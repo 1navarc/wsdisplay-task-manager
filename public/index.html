@@ -14658,17 +14658,26 @@ async function ccSendReportCard(emailEnc) {
 
 // ----- Patterns + Anomalies -----
 
-// Trigger a fresh metrics analysis run (was wired to broken Open AI Settings link)
+// Trigger a fresh metrics analysis run (was wired to broken Open AI Settings link).
+// Passes the currently-selected CC range (24h/7d/30d/90d/custom) as
+// filterOverrides.date_range_days so the run matches what the user is viewing.
 async function ccStartMetricsRun() {
-    if (!confirm('Start a fresh metrics analysis run?\n\nThis takes 1–3 minutes and will populate the response-time and hourly-volume charts.')) return;
+    const hrs = (typeof _ccRangeHours === 'number' && _ccRangeHours > 0) ? _ccRangeHours : 24;
+    const days = Math.max(1, Math.ceil(hrs / 24));
+    const label = days === 1 ? 'last 24h'
+                : days <= 7 ? `last ${days} days`
+                : days <= 30 ? `last ${days} days`
+                : `last ${days} days`;
+    if (!confirm(`Start a fresh metrics analysis run for the ${label}?\n\nThis takes 1–3 minutes and will populate the response-time and hourly-volume charts.`)) return;
     try {
         const r = await fetch('/api/ai/metrics/runs', {
             method: 'POST', credentials: 'include',
-            headers: {'Content-Type':'application/json'}, body: '{}',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ filterOverrides: { date_range_days: days, max_threads: 5000 } }),
         });
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || 'failed');
-        alert('Metrics run started (id ' + (data.run_id || '?') + ').\n\nRefresh in a few minutes to see the new charts.');
+        alert(`Metrics run started (id ${data.run_id || '?'}) covering the ${label}.\n\nRefresh in a few minutes to see the new charts.`);
     } catch (e) {
         alert('Could not start metrics run: ' + e.message);
     }
