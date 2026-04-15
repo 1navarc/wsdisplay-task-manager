@@ -16516,14 +16516,23 @@ async function ccJunkLoad() {
 }
 
 async function ccJunkOpen() {
+    // Close any open thread modal first so the junk modal isn't covered
+    const tm = document.getElementById('ccModal');
+    if (tm) tm.classList.remove('active');
     ccShowModal('🚫 Junk filter', `
         <div style="display:flex;gap:8px;border-bottom:1px solid #e2e8f0;margin-bottom:14px">
-            <button class="cc-junk-tab active" data-junk-tab="blocklist" onclick="ccJunkSwitchTab('blocklist')">Blocklist</button>
-            <button class="cc-junk-tab" data-junk-tab="spam" onclick="ccJunkSwitchTab('spam')">Possible spam</button>
+            <button class="cc-junk-tab active" data-junk-tab="spam" onclick="ccJunkSwitchTab('spam')">Possible spam</button>
+            <button class="cc-junk-tab" data-junk-tab="blocklist" onclick="ccJunkSwitchTab('blocklist')">Blocklist</button>
             <button class="cc-junk-tab" data-junk-tab="actions" onclick="ccJunkSwitchTab('actions')">Bulk scan</button>
         </div>
         <div id="ccJunkTabBody">Loading…</div>
     `);
+    // Widen the modal so list+preview both fit
+    const m = document.getElementById('ccIntelModal');
+    if (m) {
+        const inner = m.firstElementChild;
+        if (inner) inner.style.maxWidth = '1100px';
+    }
     // Inject tab styling once
     if (!document.getElementById('ccJunkTabStyle')) {
         const st = document.createElement('style');
@@ -16532,10 +16541,20 @@ async function ccJunkOpen() {
             .cc-junk-tab{ background:none;border:0;padding:8px 12px;cursor:pointer;font-size:13px;color:#64748b;border-bottom:2px solid transparent;font-weight:500 }
             .cc-junk-tab.active{ color:#0f172a;border-bottom-color:#0ea5e9 }
             .cc-junk-tab:hover{ color:#0f172a }
+            .cc-junk-grp{ background:#fff;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:8px;overflow:hidden }
+            .cc-junk-grp-head{ display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer }
+            .cc-junk-grp-head:hover{ background:#f8fafc }
+            .cc-junk-grp-count{ background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700 }
+            .cc-junk-grp-actions{ display:flex;gap:6px;flex-wrap:wrap }
+            .cc-junk-grp-children{ border-top:1px solid #f1f5f9;background:#f8fafc;padding:6px 12px 10px }
+            .cc-junk-thread-row{ display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:12px }
+            .cc-junk-thread-row:hover{ background:#fff }
+            .cc-junk-preview{ background:#fff;border:1px solid #e2e8f0;border-radius:8px;margin:6px 0 10px;padding:10px;font-size:12px;color:#334155;max-height:280px;overflow-y:auto;white-space:pre-wrap }
+            .cc-junk-quick-bar{ display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-bottom:12px }
         `;
         document.head.appendChild(st);
     }
-    ccJunkSwitchTab('blocklist');
+    ccJunkSwitchTab('spam');
 }
 
 function ccJunkSwitchTab(tab) {
@@ -16625,35 +16644,170 @@ async function ccJunkRenderSpam() {
     if (!body) return;
     body.innerHTML = '<div class="cc-skeleton" style="height:80px"></div>';
     try {
-        const r = await fetch('/api/junk/possible-spam?limit=200', { credentials: 'include' });
+        const r = await fetch('/api/junk/possible-spam/grouped?limit=5000', { credentials: 'include' });
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        const rows = await r.json();
-        if (!rows.length) {
+        const groups = await r.json();
+        if (!groups.length) {
             body.innerHTML = '<div style="color:#64748b;padding:18px;text-align:center;background:#f8fafc;border-radius:8px">No threads currently tagged as possible spam.</div>';
             return;
         }
+        const totalThreads = groups.reduce((s, g) => s + g.count, 0);
+        const bigGroups = groups.filter(g => g.count >= 2 && g.kind === 'domain');
+        const bigGroupSweep = bigGroups.length;
         body.innerHTML = `
-            <div style="font-size:12px;color:#64748b;margin-bottom:10px">
-                ${rows.length} thread${rows.length===1?'':'s'} flagged by the heuristic. Block confirms it as junk; clear marks as a false positive.
-            </div>
-            ${rows.map(t => `
-                <div class="cc-spam-row">
-                    <div style="flex:1;min-width:0;cursor:pointer" onclick="ccArchiveOpenThread('${ccEsc(t.gmail_thread_id || t.id)}')">
-                        <div style="font-weight:600;color:#0f172a;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ccEsc(t.subject || '(no subject)')}</div>
-                        <div style="font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-                            ${ccEsc(t.customer_email || '')} · ${t.last_message_at ? new Date(t.last_message_at).toLocaleDateString() : ''}
-                            ${t.junk_reason ? ` · <span style="color:#b45309">${ccEsc(t.junk_reason)}</span>` : ''}
-                        </div>
-                    </div>
-                    <div style="display:flex;gap:6px">
-                        <button class="cc-btn sm" style="background:#dc2626;color:#fff" onclick="ccJunkBlockThread('${t.id}', '${ccEsc(t.customer_email||'')}', this)">🚫 Block</button>
-                        <button class="cc-btn ghost sm" onclick="ccJunkClearThread('${t.id}', this)">✓ Not spam</button>
-                    </div>
+            <div class="cc-junk-quick-bar">
+                <div style="font-size:12px;color:#0f172a">
+                    <b>${totalThreads.toLocaleString()}</b> spam threads from <b>${groups.length}</b> sender${groups.length===1?'':'s'}.
+                    ${bigGroupSweep > 0 ? `<span style="color:#b45309"> ${bigGroupSweep} senders have 2+ threads — block their domain to clear them all.</span>` : ''}
                 </div>
-            `).join('')}
+                <div style="display:flex;gap:6px">
+                    <button class="cc-btn sm" onclick="ccJunkRenderSpam()">⟳ Refresh</button>
+                </div>
+            </div>
+            <div id="ccJunkGroupList">
+                ${groups.map((g, i) => ccJunkGroupHtml(g, i)).join('')}
+            </div>
         `;
     } catch (e) {
         body.innerHTML = `<div style="color:#b91c1c">Failed: ${ccEsc(e.message)}</div>`;
+    }
+}
+
+function ccJunkGroupHtml(g, idx) {
+    const sample = g.sample_email || '';
+    const reason = (g.threads[0] && g.threads[0].junk_reason) || '';
+    const headerSubtitle = g.kind === 'domain' && g.count > 1
+        ? `${g.count} threads from this domain${reason ? ' · ' + ccEsc(reason) : ''}`
+        : `${ccEsc(sample)}${reason ? ' · ' + ccEsc(reason) : ''}`;
+    const blockDomainBtn = g.kind === 'domain'
+        ? `<button class="cc-btn sm" style="background:#dc2626;color:#fff" onclick="event.stopPropagation();ccJunkBlockGroup('domain','${ccEsc(g.domain)}', this)" title="Add ${ccEsc(g.domain)} to blocklist and block all ${g.count} threads">🚫 Block domain (${g.count})</button>`
+        : '';
+    const blockEmailBtn = `<button class="cc-btn ghost sm" onclick="event.stopPropagation();ccJunkBlockGroup('email','${ccEsc(sample)}', this)" title="Block this exact email address">📧 Block sender</button>`;
+    const dismissBtn = `<button class="cc-btn ghost sm" onclick="event.stopPropagation();ccJunkClearGroup('${ccEsc(g.key)}', this)" title="Mark all ${g.count} threads as not spam">✓ Not spam</button>`;
+    return `
+        <div class="cc-junk-grp" data-junk-group="${idx}">
+            <div class="cc-junk-grp-head" onclick="ccJunkToggleGroup(${idx})">
+                <span class="cc-junk-grp-count">${g.count}</span>
+                <div style="flex:1;min-width:0">
+                    <div style="font-weight:700;color:#0f172a;font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                        ${g.kind === 'domain' ? '🌐 ' + ccEsc(g.domain || g.key) : '📧 ' + ccEsc(g.key)}
+                    </div>
+                    <div style="font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${headerSubtitle}</div>
+                </div>
+                <div class="cc-junk-grp-actions">${blockDomainBtn}${blockEmailBtn}${dismissBtn}</div>
+                <span style="color:#94a3b8;font-size:14px;width:14px;text-align:center" id="ccJunkCaret${idx}">▶</span>
+            </div>
+            <div class="cc-junk-grp-children" id="ccJunkChildren${idx}" style="display:none">
+                ${g.threads.map(t => `
+                    <div class="cc-junk-thread-row" onclick="ccJunkPreviewThread('${ccEsc(t.id)}', this)">
+                        <div style="flex:1;min-width:0">
+                            <div style="font-weight:600;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ccEsc(t.subject || '(no subject)')}</div>
+                            <div style="font-size:10px;color:#94a3b8">${t.last_msg_at ? new Date(t.last_msg_at).toLocaleString() : ''}</div>
+                        </div>
+                        <div style="display:flex;gap:4px">
+                            <button class="cc-btn sm" style="background:#dc2626;color:#fff;font-size:11px;padding:3px 8px" onclick="event.stopPropagation();ccJunkBlockThread('${ccEsc(t.id)}','${ccEsc(t.customer_email||'')}',this)">Block</button>
+                            <button class="cc-btn ghost sm" style="font-size:11px;padding:3px 8px" onclick="event.stopPropagation();ccJunkClearThread('${ccEsc(t.id)}',this)">Not spam</button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function ccJunkToggleGroup(idx) {
+    const child = document.getElementById('ccJunkChildren' + idx);
+    const caret = document.getElementById('ccJunkCaret' + idx);
+    if (!child) return;
+    const open = child.style.display !== 'none';
+    child.style.display = open ? 'none' : 'block';
+    if (caret) caret.textContent = open ? '▶' : '▼';
+}
+
+async function ccJunkPreviewThread(threadId, rowEl) {
+    if (!rowEl) return;
+    // Toggle: if a preview is already open right after this row, close it
+    const next = rowEl.nextElementSibling;
+    if (next && next.classList && next.classList.contains('cc-junk-preview')) {
+        next.remove();
+        return;
+    }
+    // Remove any other open preview in the same group
+    const group = rowEl.closest('.cc-junk-grp-children');
+    if (group) group.querySelectorAll('.cc-junk-preview').forEach(n => n.remove());
+    const div = document.createElement('div');
+    div.className = 'cc-junk-preview';
+    div.textContent = 'Loading…';
+    rowEl.parentNode.insertBefore(div, rowEl.nextSibling);
+    try {
+        const r = await fetch('/api/archive/thread/' + encodeURIComponent(threadId), { credentials: 'include' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        const msg = (data.messages || []).find(m => m.direction === 'inbound') || (data.messages || [])[0] || {};
+        const body = (msg.body_text_clean || msg.body_text_full || '(no text)').slice(0, 1500);
+        div.innerHTML = `
+            <div style="font-size:11px;color:#64748b;margin-bottom:6px">
+                <b>From:</b> ${ccEsc(msg.from_name || '')} &lt;${ccEsc(msg.from_email || '')}&gt;
+                · ${msg.sent_at ? new Date(msg.sent_at).toLocaleString() : ''}
+            </div>
+            <div style="font-size:13px;font-weight:600;color:#0f172a;margin-bottom:6px">${ccEsc(msg.subject || '')}</div>
+            <div style="font-size:12px;color:#475569;white-space:pre-wrap">${ccEsc(body)}</div>
+        `;
+    } catch (e) {
+        div.innerHTML = `<div style="color:#b91c1c">Preview failed: ${ccEsc(e.message)}</div>`;
+    }
+}
+
+async function ccJunkBlockGroup(kind, value, btn) {
+    if (!value) return;
+    const label = kind === 'domain' ? `domain ${value}` : value;
+    if (!confirm(`Block ${label}?\n\nThis adds it to your blocklist and immediately tags all matching threads as blocked. They'll disappear from KPIs, the attention queue, and Customer 360.\n\nReversible — remove from blocklist later if needed.`)) return;
+    try {
+        if (btn) { btn.disabled = true; btn.textContent = 'Blocking…'; }
+        const r = await fetch('/api/junk/blocklist', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pattern: value, reason: `bulk-block from spam review`, applyImmediately: true }),
+        });
+        if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            throw new Error(err.error || 'HTTP ' + r.status);
+        }
+        const row = await r.json();
+        // Refresh the spam list + strip
+        ccJunkRenderSpam();
+        ccJunkLoad();
+        // Light, non-blocking confirmation
+        if (typeof settingsToast === 'function') {
+            settingsToast(`Blocked ${row.threads_matched || 0} thread${(row.threads_matched||0)===1?'':'s'}`, 'success');
+        }
+    } catch (e) {
+        alert('Failed: ' + e.message);
+        if (btn) { btn.disabled = false; btn.textContent = kind === 'domain' ? '🚫 Block domain' : '📧 Block sender'; }
+    }
+}
+
+async function ccJunkClearGroup(groupKey, btn) {
+    // Find the group in the DOM, iterate its threads, clear each
+    const grpEl = btn.closest('.cc-junk-grp');
+    if (!grpEl) return;
+    const threadBtns = grpEl.querySelectorAll('.cc-junk-thread-row [onclick*=ccJunkClearThread]');
+    if (!confirm(`Mark all ${threadBtns.length} threads as not spam?`)) return;
+    btn.disabled = true; btn.textContent = 'Clearing…';
+    try {
+        // Pull the IDs from the existing onclick attributes (they use ccJunkClearThread('UUID'))
+        const ids = Array.from(threadBtns).map(b => {
+            const m = b.getAttribute('onclick').match(/ccJunkClearThread\('([^']+)'/);
+            return m ? m[1] : null;
+        }).filter(Boolean);
+        await Promise.all(ids.map(id =>
+            fetch('/api/junk/threads/' + id + '/clear', { method: 'POST', credentials: 'include' })
+        ));
+        ccJunkRenderSpam();
+        ccJunkLoad();
+    } catch (e) {
+        alert('Failed: ' + e.message);
+        btn.disabled = false; btn.textContent = '✓ Not spam';
     }
 }
 

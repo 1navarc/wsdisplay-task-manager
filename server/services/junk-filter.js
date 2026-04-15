@@ -141,7 +141,7 @@ async function listBlocklist({ mailboxEmail = null } = {}) {
     return r.rows;
 }
 
-async function addBlocklistEntry({ mailboxEmail = null, pattern, reason = null, addedByUserId = null }) {
+async function addBlocklistEntry({ mailboxEmail = null, pattern, reason = null, addedByUserId = null, applyImmediately = true }) {
     const norm = normalizePattern(pattern);
     if (!norm) throw new Error(`Invalid pattern "${pattern}" — must be an email or a domain.`);
     const r = await pool.query(
@@ -154,11 +154,112 @@ async function addBlocklistEntry({ mailboxEmail = null, pattern, reason = null, 
          RETURNING *`,
         [mailboxEmail, norm.value, norm.kind, reason, addedByUserId]
     );
-    return r.rows[0];
+    const row = r.rows[0];
+    if (applyImmediately) {
+        const swept = await applyBlocklistEntry(row);
+        row.threads_matched = swept;
+    }
+    return row;
+}
+
+/**
+ * Immediately tag every existing thread that matches a single blocklist entry
+ * as 'blocked'. Skips threads the user manually marked. Cheaper than a full
+ * bulk scan because we only run blocklist match for ONE entry, no heuristic.
+ * Returns the count of newly-blocked threads.
+ */
+async function applyBlocklistEntry(entry) {
+    if (!entry || !entry.id) return 0;
+    const tag = `blocklist:${entry.id}`;
+    const reason = `blocklist match: ${entry.pattern_kind}=${entry.pattern}`;
+    let upd;
+    if (entry.pattern_kind === 'email') {
+        upd = await pool.query(
+            `UPDATE email_archive_threads
+                SET junk_status='blocked',
+                    junk_reason=$2,
+                    junk_marked_at=NOW(),
+                    junk_marked_by=$3
+              WHERE LOWER(customer_email) = $4
+                AND (junk_marked_by IS NULL OR junk_marked_by NOT LIKE 'manual%')
+                AND ($5::text IS NULL OR mailbox_email = $5)
+                AND junk_status IS DISTINCT FROM 'blocked'`,
+            [null, reason, tag, entry.pattern, entry.mailbox_email]
+        );
+    } else {
+        // Domain match — sender's email ends with @<domain> or @<sub>.<domain>
+        upd = await pool.query(
+            `UPDATE email_archive_threads
+                SET junk_status='blocked',
+                    junk_reason=$2,
+                    junk_marked_at=NOW(),
+                    junk_marked_by=$3
+              WHERE (LOWER(customer_email) LIKE '%@' || $4
+                  OR LOWER(customer_email) LIKE '%.' || $4)
+                AND (junk_marked_by IS NULL OR junk_marked_by NOT LIKE 'manual%')
+                AND ($5::text IS NULL OR mailbox_email = $5)
+                AND junk_status IS DISTINCT FROM 'blocked'`,
+            [null, reason, tag, entry.pattern, entry.mailbox_email]
+        );
+    }
+    const matched = upd.rowCount || 0;
+    await pool.query(
+        `UPDATE email_archive_blocklist
+            SET threads_matched = COALESCE(threads_matched, 0) + $2,
+                last_scan_at = NOW()
+          WHERE id = $1`,
+        [entry.id, matched]
+    );
+    return matched;
 }
 
 async function removeBlocklistEntry(id) {
     await pool.query(`DELETE FROM email_archive_blocklist WHERE id = $1`, [id]);
+}
+
+/**
+ * Group currently-flagged 'possible_spam' threads by sender domain (or full
+ * sender email for free-mail senders). Powers the "easy dismissal" view.
+ */
+async function listPossibleSpamGrouped({ mailboxEmail = null, limit = 5000 } = {}) {
+    const where = mailboxEmail
+        ? `WHERE junk_status = 'possible_spam' AND mailbox_email = $1`
+        : `WHERE junk_status = 'possible_spam'`;
+    const params = mailboxEmail ? [mailboxEmail, limit] : [limit];
+    const limitParam = mailboxEmail ? '$2' : '$1';
+    // Pull raw rows; group in JS so we can compute "block domain" vs "block email" cleanly
+    const r = await pool.query(
+        `SELECT id, mailbox_email, gmail_thread_id, subject, customer_email,
+                customer_domain, last_msg_at, message_count, junk_reason
+           FROM email_archive_threads
+           ${where}
+           ORDER BY last_msg_at DESC NULLS LAST
+           LIMIT ${limitParam}`,
+        params
+    );
+    const groups = new Map();
+    for (const t of r.rows) {
+        const email = (t.customer_email || '').toLowerCase();
+        const domain = email.includes('@') ? email.split('@')[1] : '';
+        // Group key: domain for known bulk/marketing TLDs, otherwise full email
+        // (so info@zzpromos.com / info@gettent.com group together as their domain;
+        //  but bob@gmail.com / sue@gmail.com stay separate because gmail is shared)
+        const FREE_MAIL = new Set(['gmail.com','yahoo.com','hotmail.com','outlook.com','icloud.com','aol.com','live.com','me.com','msn.com','ymail.com']);
+        const groupBy = FREE_MAIL.has(domain) ? email : (domain || email);
+        if (!groups.has(groupBy)) {
+            groups.set(groupBy, {
+                key: groupBy,
+                kind: FREE_MAIL.has(domain) ? 'email' : 'domain',
+                domain,
+                sample_email: email,
+                threads: [],
+            });
+        }
+        groups.get(groupBy).threads.push(t);
+    }
+    return Array.from(groups.values())
+        .map(g => ({ ...g, count: g.threads.length, latest: g.threads[0]?.last_msg_at }))
+        .sort((a, b) => b.count - a.count);
 }
 
 // ---------- Manual per-thread mark / unmark ----------
@@ -207,7 +308,7 @@ async function runBulkScan({ mailboxEmail = null, startedByUserId = null } = {})
     );
     const runId = runIns.rows[0].id;
 
-    const counts = { scanned: 0, blocked: 0, possibleSpam: 0, cleared: 0 };
+    const counts = { threads_scanned: 0, threads_blocked: 0, threads_possible_spam: 0, threads_cleared: 0 };
 
     try {
         const blocklist = await listBlocklist({ mailboxEmail });
@@ -235,7 +336,7 @@ async function runBulkScan({ mailboxEmail = null, startedByUserId = null } = {})
             if (!r.rows.length) break;
 
             for (const t of r.rows) {
-                counts.scanned++;
+                counts.threads_scanned++;
                 lastId = t.id;
 
                 // BLOCKLIST first — wins over heuristic
@@ -251,7 +352,7 @@ async function runBulkScan({ mailboxEmail = null, startedByUserId = null } = {})
                               WHERE id=$1`,
                             [t.id, `blocklist match: ${block.pattern_kind}=${block.pattern}`, `blocklist:${block.id}`]
                         );
-                        counts.blocked++;
+                        counts.threads_blocked++;
                     }
                     continue;
                 }
@@ -265,7 +366,7 @@ async function runBulkScan({ mailboxEmail = null, startedByUserId = null } = {})
                           WHERE id=$1`,
                         [t.id]
                     );
-                    counts.cleared++;
+                    counts.threads_cleared++;
                 }
 
                 // Skip heuristics on threads the user manually marked
@@ -295,7 +396,7 @@ async function runBulkScan({ mailboxEmail = null, startedByUserId = null } = {})
                               WHERE id=$1`,
                             [t.id, reason]
                         );
-                        counts.possibleSpam++;
+                        counts.threads_possible_spam++;
                     }
                 } else if (t.junk_status === 'possible_spam'
                     && (t.junk_marked_by || '') === 'heuristic') {
@@ -307,7 +408,7 @@ async function runBulkScan({ mailboxEmail = null, startedByUserId = null } = {})
                           WHERE id=$1`,
                         [t.id]
                     );
-                    counts.cleared++;
+                    counts.threads_cleared++;
                 }
             }
 
@@ -335,7 +436,7 @@ async function runBulkScan({ mailboxEmail = null, startedByUserId = null } = {})
                     threads_scanned=$2, threads_blocked=$3,
                     threads_possible_spam=$4, threads_cleared=$5
               WHERE id=$1`,
-            [runId, counts.scanned, counts.blocked, counts.possibleSpam, counts.cleared]
+            [runId, counts.threads_scanned, counts.threads_blocked, counts.threads_possible_spam, counts.threads_cleared]
         );
 
         return { run_id: runId, ...counts };
@@ -392,12 +493,14 @@ async function listPossibleSpam({ mailboxEmail = null, limit = 100 } = {}) {
 module.exports = {
     listBlocklist,
     addBlocklistEntry,
+    applyBlocklistEntry,
     removeBlocklistEntry,
     markThread,
     clearThread,
     runBulkScan,
     getStats,
     listPossibleSpam,
+    listPossibleSpamGrouped,
     // Exposed for re-use in real-time ingest path
     classifyMessageHeuristic,
     matchBlocklist,

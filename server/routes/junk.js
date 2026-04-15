@@ -44,13 +44,14 @@ router.get('/blocklist', ...mgr, async (req, res) => {
 
 router.post('/blocklist', ...mgr, async (req, res) => {
     try {
-        const { pattern, reason, mailboxEmail } = req.body || {};
+        const { pattern, reason, mailboxEmail, applyImmediately } = req.body || {};
         if (!pattern) return res.status(400).json({ error: 'pattern required' });
         const row = await junk.addBlocklistEntry({
             pattern,
             reason: reason || null,
             mailboxEmail: mailboxEmail || null,
             addedByUserId: req.session && req.session.userId || null,
+            applyImmediately: applyImmediately !== false,  // default true
         });
         res.json(row);
     } catch (err) { res.status(400).json({ error: err.message }); }
@@ -79,9 +80,19 @@ router.get('/possible-spam', ...mgr, async (req, res) => {
     try {
         const rows = await junk.listPossibleSpam({
             mailboxEmail: req.query.mailbox || null,
-            limit: parseInt(req.query.limit) || 100,
+            limit: Math.min(parseInt(req.query.limit) || 100, 5000),
         });
         res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/possible-spam/grouped', ...mgr, async (req, res) => {
+    try {
+        const groups = await junk.listPossibleSpamGrouped({
+            mailboxEmail: req.query.mailbox || null,
+            limit: Math.min(parseInt(req.query.limit) || 5000, 10000),
+        });
+        res.json(groups);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
