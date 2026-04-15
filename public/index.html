@@ -14328,7 +14328,12 @@ function ccOpenModal(title, bodyHtml) {
     document.getElementById('ccModal').classList.add('active');
 }
 function ccCloseModal() {
-    document.getElementById('ccModal').classList.remove('active');
+    const m = document.getElementById('ccModal');
+    if (!m) return;
+    // Defensive: strip every state flag any opener might have set.
+    m.classList.remove('active');
+    m.classList.remove('open');
+    m.style.display = '';
 }
 
 async function ccOpenSlaBreaches() {
@@ -15339,8 +15344,8 @@ async function ccArchiveOpenThread(idOrGid) {
     const bodyEl = document.getElementById('ccModalBody');
     titleEl.textContent = 'Loading thread…';
     bodyEl.innerHTML = '<div class="cc-skeleton" style="height:120px"></div>';
-    modal.classList.add('open');
-    modal.style.display = 'flex';
+    // Match the rest of the file's convention: modal uses .active to show/hide.
+    modal.classList.add('active');
     try {
         const r = await fetch('/api/archive/thread/' + encodeURIComponent(idOrGid), { credentials: 'include' });
         if (!r.ok) throw new Error('load failed');
