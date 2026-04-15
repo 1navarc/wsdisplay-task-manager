@@ -557,7 +557,58 @@ async function worstReplies({ days = 30, repEmail = null, limit = 50 } = {}) {
   return r.rows;
 }
 
+/** Sentiment distribution over the period. */
+async function sentimentMix({ days = 30, mailbox = null } = {}) {
+  const params = [String(days)];
+  const conds = [`m.sent_at >= NOW() - ($1 || ' days')::interval`, `m.direction='inbound'`];
+  if (mailbox) { params.push(mailbox); conds.push(`m.mailbox_email = $${params.length}`); }
+  const r = await pool.query(`
+    SELECT c.sentiment, COUNT(*)::int AS n
+      FROM email_archive_classifications c
+      JOIN email_archive_messages m ON m.id = c.message_id
+     WHERE ${conds.join(' AND ')}
+     GROUP BY c.sentiment`, params);
+  const out = { positive: 0, neutral: 0, negative: 0 };
+  for (const row of r.rows) if (row.sentiment in out) out[row.sentiment] = row.n;
+  return out;
+}
+
+/** Top-line summary numbers for the stat strip. */
+async function summary({ days = 30 } = {}) {
+  const dStr = String(days);
+  const [classified, graded, complaints, attentionOpen, avgQuality, totalInbound] = await Promise.all([
+    pool.query(`SELECT COUNT(*)::int AS n FROM email_archive_classifications c
+                  JOIN email_archive_messages m ON m.id = c.message_id
+                 WHERE m.sent_at >= NOW() - ($1 || ' days')::interval`, [dStr]),
+    pool.query(`SELECT COUNT(*)::int AS n, AVG(g.overall_score)::numeric(4,2) AS avg
+                  FROM email_archive_rep_grades g
+                  JOIN email_archive_messages m ON m.id = g.message_id
+                 WHERE m.sent_at >= NOW() - ($1 || ' days')::interval`, [dStr]),
+    pool.query(`SELECT COUNT(*)::int AS n FROM email_archive_classifications c
+                  JOIN email_archive_messages m ON m.id = c.message_id
+                 WHERE c.is_complaint = true
+                   AND m.sent_at >= NOW() - ($1 || ' days')::interval`, [dStr]),
+    pool.query(`SELECT COUNT(*)::int AS n FROM manager_attention_items WHERE status='open'`),
+    pool.query(`SELECT AVG(g.overall_score)::numeric(4,2) AS avg
+                  FROM email_archive_rep_grades g
+                 WHERE g.graded_at >= NOW() - ($1 || ' days')::interval`, [dStr]),
+    pool.query(`SELECT COUNT(*)::int AS n FROM email_archive_messages
+                 WHERE direction='inbound' AND sent_at >= NOW() - ($1 || ' days')::interval`, [dStr]),
+  ]);
+  return {
+    days,
+    total_inbound: totalInbound.rows[0].n,
+    classified: classified.rows[0].n,
+    graded: graded.rows[0].n,
+    complaints: complaints.rows[0].n,
+    attention_open: attentionOpen.rows[0].n,
+    avg_quality: avgQuality.rows[0].avg ? Number(avgQuality.rows[0].avg) : null,
+  };
+}
+
 module.exports = {
+  sentimentMix,
+  summary,
   // Top questions / heatmap
   topQuestions,
   productHourHeatmap,

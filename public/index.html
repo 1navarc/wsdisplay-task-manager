@@ -13437,6 +13437,7 @@ async function loadCommandCenter() {
     ccLoadAnomalies();   // lazy
     ccLoadConfig();      // SLA threshold + snoozes
     ccArchiveLoadStatus(); // archive tiles + progress bar
+    ccIntelStatsLoad();
     ccAttentionLoad();
     ccQualityLoad();
     ccTopQLoad();
@@ -13513,10 +13514,57 @@ function ccShellHtml() {
             </div>
             <div id="ccArchiveBarRows" style="margin-top:10px;display:flex;flex-direction:column;gap:6px;font-size:12.5px"></div>
         </div>
-        <style>@keyframes ccPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.4)}}</style>
+        <style>
+            @keyframes ccPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.4)}}
+            /* === 3D / glass polish for intelligence sections === */
+            .cc-3d{
+                background:linear-gradient(135deg,#ffffff 0%,#f8fafc 100%);
+                border:1px solid rgba(99,102,241,.12);
+                border-radius:18px;
+                box-shadow:
+                    0 1px 2px rgba(15,23,42,.04),
+                    0 8px 24px rgba(99,102,241,.06),
+                    inset 0 1px 0 rgba(255,255,255,.6);
+                transition:transform .25s ease, box-shadow .25s ease;
+            }
+            .cc-3d:hover{
+                transform:translateY(-2px);
+                box-shadow:
+                    0 2px 4px rgba(15,23,42,.06),
+                    0 18px 40px rgba(99,102,241,.14),
+                    inset 0 1px 0 rgba(255,255,255,.7);
+            }
+            body.dark-mode .cc-3d{
+                background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);
+                border-color:rgba(148,163,184,.18);
+            }
+            .cc-stat-card{
+                position:relative; overflow:hidden;
+                border-radius:16px; padding:18px 20px;
+                color:#fff;
+                background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 60%,#ec4899 100%);
+                box-shadow:0 14px 32px rgba(99,102,241,.28), inset 0 1px 0 rgba(255,255,255,.25);
+                transform:perspective(800px) rotateX(0deg);
+                transition:transform .35s ease;
+            }
+            .cc-stat-card:hover{ transform:perspective(800px) rotateX(2deg) translateY(-2px); }
+            .cc-stat-card.warn{ background:linear-gradient(135deg,#f59e0b 0%,#ef4444 100%); box-shadow:0 14px 32px rgba(239,68,68,.28), inset 0 1px 0 rgba(255,255,255,.25); }
+            .cc-stat-card.good{ background:linear-gradient(135deg,#10b981 0%,#06b6d4 100%); box-shadow:0 14px 32px rgba(16,185,129,.28), inset 0 1px 0 rgba(255,255,255,.25); }
+            .cc-stat-card .lbl{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; opacity:.85 }
+            .cc-stat-card .val{ font-size:32px; font-weight:800; margin-top:4px; line-height:1 }
+            .cc-stat-card .sub{ font-size:12px; opacity:.85; margin-top:6px }
+            /* Sortable table headers */
+            .cc-sort{ cursor:pointer; user-select:none }
+            .cc-sort:hover{ color:#0f172a }
+            .cc-sort .arrow{ opacity:.35; margin-left:4px }
+            .cc-sort.active .arrow{ opacity:1; color:#6366f1 }
+        </style>
+
+        <!-- ============== Quick stat strip (intelligence summary) ============== -->
+        <div id="ccIntelStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px"></div>
 
         <!-- ============== Manager Attention Center (top of CC) ============== -->
-        <div class="cc-section" id="ccAttentionSection" style="border-left:4px solid #ef4444">
+        <div class="cc-section cc-3d" id="ccAttentionSection" style="border-left:4px solid #ef4444">
             <div class="cc-section-header">
                 <div>
                     <div class="cc-section-title">🚨 Items needing your attention</div>
@@ -13621,7 +13669,7 @@ function ccShellHtml() {
         </div>
 
         <!-- ============== Reply quality scorecard ============== -->
-        <div class="cc-section" id="ccQualitySection">
+        <div class="cc-section cc-3d" id="ccQualitySection">
             <div class="cc-section-header">
                 <div>
                     <div class="cc-section-title">⭐ Reply quality by rep</div>
@@ -13638,10 +13686,11 @@ function ccShellHtml() {
                 </div>
             </div>
             <div id="ccQualityTable"><div class="cc-skeleton" style="height:80px"></div></div>
+            <div id="ccQualityRadialWrap" style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px"></div>
         </div>
 
         <!-- ============== Top customer questions ============== -->
-        <div class="cc-section" id="ccTopQSection">
+        <div class="cc-section cc-3d" id="ccTopQSection">
             <div class="cc-section-header">
                 <div>
                     <div class="cc-section-title">📊 Top customer questions</div>
@@ -13658,11 +13707,18 @@ function ccShellHtml() {
                     <button class="cc-btn ghost sm" onclick="ccClassifierBackfillPrompt()">Classify backlog…</button>
                 </div>
             </div>
-            <div id="ccTopQTable"><div class="cc-skeleton" style="height:80px"></div></div>
+            <div style="display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start" id="ccTopQGrid">
+                <div id="ccTopQBarChart" style="min-height:360px"></div>
+                <div>
+                    <div style="font-size:11px;text-transform:uppercase;color:#64748b;font-weight:700;margin-bottom:6px">Sentiment mix</div>
+                    <div id="ccSentimentDonut" style="min-height:260px"></div>
+                </div>
+            </div>
+            <div id="ccTopQTable" style="margin-top:14px"><div class="cc-skeleton" style="height:80px"></div></div>
         </div>
 
         <!-- ============== Product × hour heatmap ============== -->
-        <div class="cc-section" id="ccHeatmapSection">
+        <div class="cc-section cc-3d" id="ccHeatmapSection">
             <div class="cc-section-header">
                 <div>
                     <div class="cc-section-title">🌡️ Product × time-of-day heatmap</div>
@@ -13678,7 +13734,7 @@ function ccShellHtml() {
         </div>
 
         <!-- ============== Auto-suggested FAQ entries ============== -->
-        <div class="cc-section" id="ccFaqSection">
+        <div class="cc-section cc-3d" id="ccFaqSection">
             <div class="cc-section-header">
                 <div>
                     <div class="cc-section-title">🌐 Auto-suggested FAQ entries (for the website)</div>
@@ -13698,7 +13754,7 @@ function ccShellHtml() {
         </div>
 
         <!-- ============== Auto-suggested AI training entries ============== -->
-        <div class="cc-section" id="ccTrainingSection">
+        <div class="cc-section cc-3d" id="ccTrainingSection">
             <div class="cc-section-header">
                 <div>
                     <div class="cc-section-title">🤖 Auto-suggested AI training entries</div>
@@ -15275,6 +15331,9 @@ async function ccAttentionRunDetectors() {
 
 /* --------------------------- Quality --------------------------- */
 
+let _ccQualityRows = [];
+let _ccQualitySort = { key: 'avg_overall', dir: 'asc' };
+
 async function ccQualityLoad() {
     const root = document.getElementById('ccQualityTable');
     if (!root) return;
@@ -15282,33 +15341,119 @@ async function ccQualityLoad() {
     try {
         const days = (document.getElementById('ccQualityDays') || {}).value || '30';
         const data = await ccApi('/api/intel/quality?days=' + encodeURIComponent(days));
-        const rows = data.rows || [];
-        if (!rows.length) {
+        _ccQualityRows = data.rows || [];
+        if (!_ccQualityRows.length) {
             root.innerHTML = '<div style="padding:18px;color:#64748b;background:#f8fafc;border-radius:10px">No graded replies yet. The grader runs every 5 minutes on new outbound messages, or click "Grade backlog…" to grade older replies.</div>';
+            const wrap = document.getElementById('ccQualityRadialWrap');
+            if (wrap) wrap.innerHTML = '';
             return;
         }
-        const ths = `<thead><tr style="font-size:11px;text-transform:uppercase;color:#64748b;text-align:left">
-            <th style="padding:8px">Rep</th><th>Replies</th>
-            <th>Tone</th><th>Complete</th><th>Accuracy</th><th>Followthrough</th>
-            <th>Overall</th><th>Low-quality</th><th></th></tr></thead>`;
-        const trs = rows.map(r => {
-            const overall = Number(r.avg_overall || 0);
-            const overallColor = overall >= 4 ? '#10b981' : overall >= 3 ? '#f59e0b' : '#ef4444';
-            return `<tr style="border-top:1px solid #e2e8f0;font-size:13px">
-                <td style="padding:8px;font-weight:600;color:#0f172a">${ccEsc(r.rep)}</td>
-                <td>${r.replies_graded}</td>
-                <td>${r.avg_tone || '—'}</td>
-                <td>${r.avg_completeness || '—'}</td>
-                <td>${r.avg_accuracy || '—'}</td>
-                <td>${r.avg_followthrough || '—'}</td>
-                <td style="font-weight:700;color:${overallColor}">${r.avg_overall || '—'}</td>
-                <td style="color:${r.low_quality_count > 0 ? '#b91c1c' : '#94a3b8'};font-weight:600">${r.low_quality_count}</td>
-                <td><button class="cc-btn ghost sm" onclick="ccQualityShowWorst('${ccEsc(r.rep_email || '')}')">Worst replies</button></td>
-            </tr>`;
-        }).join('');
-        root.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">${ths}<tbody>${trs}</tbody></table></div>`;
+        ccQualityRenderTable();
+        ccQualityRenderRadials();
     } catch (e) {
         root.innerHTML = '<div style="padding:16px;color:#b91c1c">Failed to load: ' + ccEsc(e.message) + '</div>';
+    }
+}
+function ccQualitySetSort(key) {
+    if (_ccQualitySort.key === key) _ccQualitySort.dir = _ccQualitySort.dir === 'desc' ? 'asc' : 'desc';
+    else { _ccQualitySort.key = key; _ccQualitySort.dir = 'desc'; }
+    ccQualityRenderTable();
+}
+function ccQualityRenderTable() {
+    const root = document.getElementById('ccQualityTable');
+    const { key, dir } = _ccQualitySort;
+    const mult = dir === 'desc' ? -1 : 1;
+    const rows = [..._ccQualityRows].sort((a, b) => {
+        const av = Number(a[key]) || 0;
+        const bv = Number(b[key]) || 0;
+        return (av - bv) * mult;
+    });
+    const arrow = (k) => `<span class="arrow">${_ccQualitySort.key === k ? (dir === 'desc' ? '▼' : '▲') : '↕'}</span>`;
+    const cls = (k) => 'cc-sort' + (_ccQualitySort.key === k ? ' active' : '');
+    const ths = `<thead><tr style="font-size:11px;text-transform:uppercase;color:#64748b;text-align:left">
+        <th style="padding:8px">Rep</th>
+        <th class="${cls('replies_graded')}" onclick="ccQualitySetSort('replies_graded')">Replies${arrow('replies_graded')}</th>
+        <th class="${cls('avg_tone')}" onclick="ccQualitySetSort('avg_tone')">Tone${arrow('avg_tone')}</th>
+        <th class="${cls('avg_completeness')}" onclick="ccQualitySetSort('avg_completeness')">Complete${arrow('avg_completeness')}</th>
+        <th class="${cls('avg_accuracy')}" onclick="ccQualitySetSort('avg_accuracy')">Accuracy${arrow('avg_accuracy')}</th>
+        <th class="${cls('avg_followthrough')}" onclick="ccQualitySetSort('avg_followthrough')">Followthrough${arrow('avg_followthrough')}</th>
+        <th class="${cls('avg_overall')}" onclick="ccQualitySetSort('avg_overall')">Overall${arrow('avg_overall')}</th>
+        <th class="${cls('low_quality_count')}" onclick="ccQualitySetSort('low_quality_count')">Low-quality${arrow('low_quality_count')}</th>
+        <th></th></tr></thead>`;
+    const trs = rows.map(r => {
+        const overall = Number(r.avg_overall || 0);
+        const overallColor = overall >= 4 ? '#10b981' : overall >= 3 ? '#f59e0b' : '#ef4444';
+        return `<tr style="border-top:1px solid #e2e8f0;font-size:13px">
+            <td style="padding:8px;font-weight:600;color:#0f172a">${ccEsc(r.rep)}</td>
+            <td>${r.replies_graded}</td>
+            <td>${r.avg_tone || '—'}</td>
+            <td>${r.avg_completeness || '—'}</td>
+            <td>${r.avg_accuracy || '—'}</td>
+            <td>${r.avg_followthrough || '—'}</td>
+            <td style="font-weight:700;color:${overallColor}">${r.avg_overall || '—'}</td>
+            <td style="color:${r.low_quality_count > 0 ? '#b91c1c' : '#94a3b8'};font-weight:600">${r.low_quality_count}</td>
+            <td><button class="cc-btn ghost sm" onclick="ccQualityShowWorst('${ccEsc(r.rep_email || '')}')">Worst replies</button></td>
+        </tr>`;
+    }).join('');
+    root.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">${ths}<tbody>${trs}</tbody></table></div>`;
+}
+function ccQualityRenderRadials() {
+    const wrap = document.getElementById('ccQualityRadialWrap');
+    if (!wrap || typeof ApexCharts === 'undefined') return;
+    Object.keys(_ccCharts).filter(k => k.startsWith('repRadial_')).forEach(k => {
+        try { _ccCharts[k].destroy(); } catch {} delete _ccCharts[k];
+    });
+    wrap.innerHTML = _ccQualityRows.map((r, i) => `<div style="text-align:center" id="repRadialBox_${i}">
+        <div id="repRadial_${i}" style="height:160px"></div>
+        <div style="font-weight:700;font-size:12px;color:#0f172a;margin-top:-6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ccEsc(r.rep)}</div>
+        <div style="font-size:11px;color:#64748b">${r.replies_graded} replies</div>
+    </div>`).join('');
+    _ccQualityRows.forEach((r, i) => {
+        const el = document.getElementById('repRadial_' + i); if (!el) return;
+        const overall = Number(r.avg_overall || 0);
+        const pct = Math.max(0, Math.min(100, (overall / 5) * 100));
+        const color = overall >= 4 ? '#10b981' : overall >= 3 ? '#f59e0b' : '#ef4444';
+        const c = new ApexCharts(el, {
+            chart: { type: 'radialBar', height: 160, sparkline: { enabled: true },
+                     dropShadow: { enabled: true, top: 3, blur: 6, opacity: 0.2, color } },
+            series: [Number(pct.toFixed(0))],
+            colors: [color],
+            plotOptions: { radialBar: {
+                hollow: { size: '60%' },
+                track: { background: '#e2e8f0' },
+                dataLabels: {
+                    name: { show: false },
+                    value: { fontSize: '20px', fontWeight: 800, color: '#0f172a',
+                             offsetY: 6, formatter: () => overall.toFixed(2) }
+                }
+            }},
+            stroke: { lineCap: 'round' },
+        });
+        _ccCharts['repRadial_' + i] = c;
+        c.render();
+    });
+}
+
+/* ---------------- Stat strip (top-of-CC) ---------------- */
+async function ccIntelStatsLoad() {
+    const wrap = document.getElementById('ccIntelStats');
+    if (!wrap) return;
+    wrap.innerHTML = '<div class="cc-skeleton" style="height:80px"></div>'.repeat(5);
+    try {
+        const data = await ccApi('/api/intel/summary?days=30');
+        const card = (cls, lbl, val, sub) =>
+            `<div class="cc-stat-card ${cls || ''}"><div class="lbl">${lbl}</div><div class="val">${val}</div><div class="sub">${sub || ''}</div></div>`;
+        const av = data.avg_quality;
+        const qualClass = av == null ? '' : (av >= 4 ? 'good' : av >= 3 ? '' : 'warn');
+        wrap.innerHTML = [
+            card('', 'Inbound · 30d', (data.total_inbound || 0).toLocaleString(), `${(data.classified || 0).toLocaleString()} classified`),
+            card(data.complaints > 5 ? 'warn' : '', 'Complaints', (data.complaints || 0).toLocaleString(), 'last 30 days'),
+            card(data.attention_open > 0 ? 'warn' : 'good', 'Attention queue', (data.attention_open || 0).toLocaleString(), 'open items'),
+            card(qualClass, 'Avg reply quality', av != null ? av.toFixed(2) : '—', av != null ? 'out of 5.0' : 'no grades yet'),
+            card('', 'Replies graded', (data.graded || 0).toLocaleString(), 'last 30 days'),
+        ].join('');
+    } catch (e) {
+        wrap.innerHTML = '<div style="padding:12px;color:#b91c1c;font-size:13px">Stats unavailable: ' + ccEsc(e.message) + '</div>';
     }
 }
 async function ccQualityShowWorst(repEmail) {
@@ -15351,6 +15496,9 @@ async function ccQualityBackfillPrompt() {
 let _ccTopQTimer = null;
 function ccTopQDebounced() { clearTimeout(_ccTopQTimer); _ccTopQTimer = setTimeout(ccTopQLoad, 350); }
 
+let _ccTopQRows = [];
+let _ccTopQSort = { key: 'volume', dir: 'desc' };
+
 async function ccTopQLoad() {
     const root = document.getElementById('ccTopQTable');
     if (!root) return;
@@ -15358,31 +15506,112 @@ async function ccTopQLoad() {
     try {
         const days = (document.getElementById('ccTopQDays') || {}).value || '30';
         const product = (document.getElementById('ccTopQProduct') || {}).value || '';
-        const params = new URLSearchParams({ days, limit: 30 });
+        const params = new URLSearchParams({ days, limit: 50 });
         if (product) params.set('product_line', product);
-        const data = await ccApi('/api/intel/top-questions?' + params.toString());
-        const rows = data.rows || [];
-        if (!rows.length) {
+        const [topData, sentData] = await Promise.all([
+            ccApi('/api/intel/top-questions?' + params.toString()),
+            ccApi('/api/intel/sentiment?days=' + encodeURIComponent(days)),
+        ]);
+        _ccTopQRows = topData.rows || [];
+        if (!_ccTopQRows.length) {
             root.innerHTML = '<div style="padding:18px;color:#64748b;background:#f8fafc;border-radius:10px">No classifications yet for this window. The classifier runs every 5 minutes on new inbound messages — or click "Classify backlog…" to backfill.</div>';
+            ccTopQRenderBar([]);
+            ccSentimentRenderDonut(sentData || {});
             return;
         }
-        const ths = `<thead><tr style="font-size:11px;text-transform:uppercase;color:#64748b;text-align:left">
-            <th style="padding:8px">Product</th><th>Question type</th><th>Volume</th>
-            <th>Complaints</th><th>Sample question</th></tr></thead>`;
-        const trs = rows.map(r => {
-            const sample = (r.sample_questions && r.sample_questions[0]) || '';
-            return `<tr style="border-top:1px solid #e2e8f0;font-size:13px">
-                <td style="padding:8px;font-weight:600;color:#0f172a">${ccEsc(r.product_line)}</td>
-                <td><span style="font-size:11px;font-weight:600;color:#475569;background:#f1f5f9;padding:2px 8px;border-radius:10px">${ccEsc(r.question_type)}</span></td>
-                <td style="font-weight:700">${r.volume}</td>
-                <td style="color:${r.complaint_count > 0 ? '#b91c1c' : '#94a3b8'}">${r.complaint_count}</td>
-                <td style="color:#475569;max-width:360px">${ccEsc(sample)}</td>
-            </tr>`;
-        }).join('');
-        root.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">${ths}<tbody>${trs}</tbody></table></div>`;
+        ccTopQRenderTable();
+        ccTopQRenderBar(_ccTopQRows.slice(0, 12));
+        ccSentimentRenderDonut(sentData || {});
     } catch (e) {
         root.innerHTML = '<div style="padding:16px;color:#b91c1c">Failed to load: ' + ccEsc(e.message) + '</div>';
     }
+}
+function ccTopQSetSort(key) {
+    if (_ccTopQSort.key === key) _ccTopQSort.dir = _ccTopQSort.dir === 'desc' ? 'asc' : 'desc';
+    else { _ccTopQSort.key = key; _ccTopQSort.dir = 'desc'; }
+    ccTopQRenderTable();
+}
+function ccTopQRenderTable() {
+    const root = document.getElementById('ccTopQTable');
+    if (!root) return;
+    const { key, dir } = _ccTopQSort;
+    const mult = dir === 'desc' ? -1 : 1;
+    const rows = [..._ccTopQRows].sort((a, b) => {
+        const av = a[key] ?? '';
+        const bv = b[key] ?? '';
+        if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * mult;
+        return String(av).localeCompare(String(bv)) * mult;
+    });
+    const arrow = (k) => `<span class="arrow">${_ccTopQSort.key === k ? (dir === 'desc' ? '▼' : '▲') : '↕'}</span>`;
+    const cls = (k) => 'cc-sort' + (_ccTopQSort.key === k ? ' active' : '');
+    const ths = `<thead><tr style="font-size:11px;text-transform:uppercase;color:#64748b;text-align:left">
+        <th class="${cls('product_line')}" onclick="ccTopQSetSort('product_line')" style="padding:8px">Product${arrow('product_line')}</th>
+        <th class="${cls('question_type')}" onclick="ccTopQSetSort('question_type')">Question type${arrow('question_type')}</th>
+        <th class="${cls('volume')}" onclick="ccTopQSetSort('volume')">Volume${arrow('volume')}</th>
+        <th class="${cls('complaint_count')}" onclick="ccTopQSetSort('complaint_count')">Complaints${arrow('complaint_count')}</th>
+        <th class="${cls('negative_count')}" onclick="ccTopQSetSort('negative_count')">Negative${arrow('negative_count')}</th>
+        <th>Sample question</th></tr></thead>`;
+    const trs = rows.map(r => {
+        const sample = (r.sample_questions && r.sample_questions[0]) || '';
+        return `<tr style="border-top:1px solid #e2e8f0;font-size:13px">
+            <td style="padding:8px;font-weight:600;color:#0f172a">${ccEsc(r.product_line)}</td>
+            <td><span style="font-size:11px;font-weight:600;color:#475569;background:#f1f5f9;padding:2px 8px;border-radius:10px">${ccEsc(r.question_type)}</span></td>
+            <td style="font-weight:700">${r.volume}</td>
+            <td style="color:${r.complaint_count > 0 ? '#b91c1c' : '#94a3b8'};font-weight:${r.complaint_count > 0 ? 700 : 400}">${r.complaint_count}</td>
+            <td style="color:${r.negative_count > 0 ? '#b45309' : '#94a3b8'}">${r.negative_count}</td>
+            <td style="color:#475569;max-width:360px">${ccEsc(sample)}</td>
+        </tr>`;
+    }).join('');
+    root.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">${ths}<tbody>${trs}</tbody></table></div>`;
+}
+function ccTopQRenderBar(rows) {
+    const el = document.getElementById('ccTopQBarChart');
+    if (!el || typeof ApexCharts === 'undefined') return;
+    if (_ccCharts.topQBar) { try { _ccCharts.topQBar.destroy(); } catch{} }
+    if (!rows.length) { el.innerHTML = ''; return; }
+    const cats = rows.map(r => `${r.product_line} · ${r.question_type}`);
+    _ccCharts.topQBar = new ApexCharts(el, {
+        chart: { type: 'bar', height: 360, toolbar: { show: false }, fontFamily: 'inherit',
+                 dropShadow: { enabled: true, top: 4, blur: 8, opacity: 0.18, color: '#6366f1' } },
+        plotOptions: { bar: { horizontal: true, borderRadius: 6, barHeight: '70%',
+                              colors: { ranges: [
+                                  { from: 0, to: 9999, color: '#6366f1' },
+                              ]}}},
+        series: [
+            { name: 'Volume',     data: rows.map(r => r.volume) },
+            { name: 'Complaints', data: rows.map(r => r.complaint_count) },
+        ],
+        colors: ['#6366f1', '#ef4444'],
+        xaxis: { categories: cats, labels: { style: { fontSize: '11px' } } },
+        yaxis: { labels: { style: { fontSize: '11px' }, maxWidth: 220 } },
+        legend: { position: 'top', horizontalAlign: 'left' },
+        grid: { borderColor: '#e2e8f0' },
+        dataLabels: { enabled: false },
+        title: { text: 'Top product × question (volume vs. complaints)', style: { fontSize: '13px', fontWeight: 700 } },
+    });
+    _ccCharts.topQBar.render();
+}
+function ccSentimentRenderDonut(s) {
+    const el = document.getElementById('ccSentimentDonut');
+    if (!el || typeof ApexCharts === 'undefined') return;
+    if (_ccCharts.sent) { try { _ccCharts.sent.destroy(); } catch{} }
+    const pos = s.positive || 0, neu = s.neutral || 0, neg = s.negative || 0;
+    if (pos + neu + neg === 0) { el.innerHTML = '<div style="color:#94a3b8;text-align:center;padding:40px 0">No data</div>'; return; }
+    _ccCharts.sent = new ApexCharts(el, {
+        chart: { type: 'donut', height: 260, fontFamily: 'inherit',
+                 dropShadow: { enabled: true, top: 4, blur: 8, opacity: 0.18, color: '#6366f1' } },
+        series: [pos, neu, neg],
+        labels: ['Positive', 'Neutral', 'Negative'],
+        colors: ['#10b981', '#94a3b8', '#ef4444'],
+        legend: { position: 'bottom', fontSize: '12px' },
+        plotOptions: { pie: { donut: { size: '68%', labels: {
+            show: true,
+            total: { show: true, label: 'Total', fontSize: '12px', fontWeight: 600,
+                     formatter: () => (pos + neu + neg).toLocaleString() }
+        } } } },
+        dataLabels: { style: { fontSize: '11px', fontWeight: 600 } },
+    });
+    _ccCharts.sent.render();
 }
 
 async function ccClassifierBackfillPrompt() {

@@ -137,6 +137,20 @@ router.get('/classify/pending', ...mgr, async (req, res) => {
 
 /* ----------------------- top questions / heatmap ----------------- */
 
+router.get('/summary', ...mgr, async (req, res) => {
+  try {
+    const days = Math.min(parseInt(req.query.days, 10) || 30, 365);
+    res.json(await intel.summary({ days }));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/sentiment', ...mgr, async (req, res) => {
+  try {
+    const days = Math.min(parseInt(req.query.days, 10) || 30, 365);
+    res.json(await intel.sentimentMix({ days, mailbox: req.query.mailbox || null }));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/top-questions', ...mgr, async (req, res) => {
   try {
     const days = Math.min(parseInt(req.query.days, 10) || 30, 365);
