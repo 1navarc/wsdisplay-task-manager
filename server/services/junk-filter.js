@@ -177,29 +177,29 @@ async function applyBlocklistEntry(entry) {
         upd = await pool.query(
             `UPDATE email_archive_threads
                 SET junk_status='blocked',
-                    junk_reason=$2,
+                    junk_reason=$1,
                     junk_marked_at=NOW(),
-                    junk_marked_by=$3
-              WHERE LOWER(customer_email) = $4
+                    junk_marked_by=$2
+              WHERE LOWER(customer_email) = $3
                 AND (junk_marked_by IS NULL OR junk_marked_by NOT LIKE 'manual%')
-                AND ($5::text IS NULL OR mailbox_email = $5)
+                AND ($4::text IS NULL OR mailbox_email = $4)
                 AND junk_status IS DISTINCT FROM 'blocked'`,
-            [null, reason, tag, entry.pattern, entry.mailbox_email]
+            [reason, tag, entry.pattern, entry.mailbox_email]
         );
     } else {
         // Domain match — sender's email ends with @<domain> or @<sub>.<domain>
         upd = await pool.query(
             `UPDATE email_archive_threads
                 SET junk_status='blocked',
-                    junk_reason=$2,
+                    junk_reason=$1,
                     junk_marked_at=NOW(),
-                    junk_marked_by=$3
-              WHERE (LOWER(customer_email) LIKE '%@' || $4
-                  OR LOWER(customer_email) LIKE '%.' || $4)
+                    junk_marked_by=$2
+              WHERE (LOWER(customer_email) LIKE '%@' || $3
+                  OR LOWER(customer_email) LIKE '%.' || $3)
                 AND (junk_marked_by IS NULL OR junk_marked_by NOT LIKE 'manual%')
-                AND ($5::text IS NULL OR mailbox_email = $5)
+                AND ($4::text IS NULL OR mailbox_email = $4)
                 AND junk_status IS DISTINCT FROM 'blocked'`,
-            [null, reason, tag, entry.pattern, entry.mailbox_email]
+            [reason, tag, entry.pattern, entry.mailbox_email]
         );
     }
     const matched = upd.rowCount || 0;
