@@ -142,7 +142,7 @@
             position: fixed;
             top: 0; left: 0; right: 0;
             height: 40px;
-            z-index: 60;
+            z-index: 150;
             background: linear-gradient(90deg, #1e1b4b 0%, #312e81 50%, #1e1b4b 100%);
             color: #e0e7ff;
             display: none;
@@ -1617,23 +1617,23 @@
         .analytics-container {
             display: none;
             position: fixed;
-            top: 0;
+            top: 40px;
             left: 0;
             right: 0;
             bottom: 0;
             overflow-y: auto;
             background: #f3f4f6;
-            z-index: 100;
+            z-index: 50;
         }
 
         /* ===== COMMAND CENTER ===== */
         .cc-container {
             display: none;
             position: fixed;
-            inset: 0;
+            top: 40px; left: 0; right: 0; bottom: 0;
             overflow-y: auto;
             background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
-            z-index: 100;
+            z-index: 50;
         }
         .cc-container.active { display: block; }
         body.dark-mode .cc-container { background: linear-gradient(180deg,#0f172a,#1e293b); color:#e2e8f0 }
@@ -2541,10 +2541,10 @@
         .feedback-container {
             display: none;
             position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
+            top: 40px; left: 0; right: 0; bottom: 0;
             overflow-y: auto;
             background: #f3f4f6;
-            z-index: 100;
+            z-index: 50;
         }
         .feedback-content {
             padding: 24px 40px;
@@ -3057,10 +3057,10 @@
         .settings-container {
             display: none;
             position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
+            top: 40px; left: 0; right: 0; bottom: 0;
             overflow-y: auto;
             background: #f3f4f6;
-            z-index: 100;
+            z-index: 50;
         }
         .settings-container.active { display: block; }
 
