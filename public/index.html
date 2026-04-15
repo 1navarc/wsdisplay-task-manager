@@ -10075,8 +10075,9 @@ async function loadSettingsUsers(content) {
                                     ${statusLabel}
                                 </span>
                             </td>
-                            <td style="text-align:right">
-                                ${hasSignedIn ? '' : `<button class="settings-btn" style="font-size:12px;padding:6px 10px" onclick="resendInvite('${u.id}', '${escapeHtml(u.email)}')">Resend invite</button>`}
+                            <td style="text-align:right;white-space:nowrap">
+                                ${hasSignedIn ? '' : `<button class="settings-btn" style="font-size:12px;padding:6px 10px;margin-right:6px" onclick="resendInvite('${u.id}', '${escapeHtml(u.email)}')">Resend invite</button>`}
+                                <button class="settings-btn" style="font-size:12px;padding:6px 10px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c" onclick="removeTeamMember('${u.id}', '${escapeHtml(u.email)}', '${escapeHtml(u.name || '')}', ${hasSignedIn ? 'true' : 'false'})">Remove</button>
                             </td>
                         </tr>`;
                     }).join('')}
@@ -10217,6 +10218,31 @@ async function resendInvite(userId, email) {
         settingsToast(`Invite resent to ${email} from ${data.sender}`, 'success');
     } catch (err) {
         settingsToast('Failed to resend: ' + err.message, 'error');
+    }
+}
+
+async function removeTeamMember(userId, email, name, hasSignedIn) {
+    const label = name ? `${name} (${email})` : email;
+    const warning = hasSignedIn
+        ? `Remove ${label}?\n\nThis will revoke their access immediately and free up the email address so you can re-invite them later. Their past activity (assigned conversations, notes, etc.) will remain in the system.`
+        : `Remove pending invite for ${label}?\n\nSince they have not signed in yet, this will permanently delete the invite row.`;
+    if (!confirm(warning)) return;
+    try {
+        const res = await fetch(`/api/manager/employees/${userId}`, {
+            method: 'DELETE',
+            credentials: 'include'
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Remove failed');
+        const verb = data.mode === 'soft_removed' ? 'Access revoked for' : 'Removed';
+        settingsToast(`${verb} ${email}`, 'success');
+        // Refresh the team members table
+        const contentEl = document.getElementById('settingsTabContent');
+        if (contentEl && typeof loadSettingsUsers === 'function') {
+            loadSettingsUsers(contentEl).catch(() => {});
+        }
+    } catch (err) {
+        settingsToast('Failed to remove: ' + err.message, 'error');
     }
 }
 

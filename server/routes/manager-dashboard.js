@@ -293,6 +293,54 @@ router.patch('/employees/:id/active', requireAuth, requireRole('manager'), async
   }
 });
 
+// DELETE /api/manager/employees/:id - remove a user (manager only)
+// - If the user is a pending invite (never signed in) and has no foreign-key references,
+//   the row is hard-deleted and the email is freed for a fresh invite.
+// - Otherwise the user is deactivated, their google_token is cleared (revoking access),
+//   and their email is suffixed so the original address is freed for re-invite.
+router.delete('/employees/:id', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (req.session && req.session.userId === id) {
+      return res.status(400).json({ error: 'You cannot remove your own account.' });
+    }
+    const lookup = await pool.query(
+      'SELECT id, email, name, role, google_token, has_signed_in FROM users WHERE id = $1',
+      [id]
+    );
+    if (lookup.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const user = lookup.rows[0];
+
+    // Try a hard delete first — only works if the user has no FK rows referencing them.
+    try {
+      await pool.query('DELETE FROM users WHERE id = $1', [id]);
+      return res.json({ ok: true, mode: 'deleted', email: user.email });
+    } catch (delErr) {
+      // 23503 = foreign_key_violation. Fall back to soft-remove.
+      if (delErr.code !== '23503') {
+        console.error('Hard-delete user failed (non-FK error):', delErr);
+        return res.status(500).json({ error: delErr.message });
+      }
+    }
+
+    // Soft remove: revoke access, deactivate, free up the email for re-invite.
+    const stamp = Date.now();
+    const freedEmail = `${user.email}.removed-${stamp}`;
+    await pool.query(
+      `UPDATE users
+         SET google_token = NULL,
+             is_active = FALSE,
+             email = $1
+       WHERE id = $2`,
+      [freedEmail, id]
+    );
+    res.json({ ok: true, mode: 'soft_removed', original_email: user.email, archived_email: freedEmail });
+  } catch (err) {
+    console.error('Delete user error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/manager/teams - list teams
 router.get('/teams', requireAuth, async (req, res) => {
   try {
