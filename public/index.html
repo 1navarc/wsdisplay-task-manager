@@ -13494,6 +13494,9 @@ function ccSetRange(hours) {
     document.querySelectorAll('.cc-range-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.hours === String(hours));
     });
+    // Immediate subtitle feedback while data refreshes
+    const sub = document.getElementById('ccSubtitle');
+    if (sub) sub.textContent = 'Loading ' + ccRangeLabel().toLowerCase() + '…';
     loadCommandCenter();
 }
 
@@ -13582,11 +13585,11 @@ function ccShellHtml() {
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                 <div class="cc-range-pill" id="ccRangePill">
-                    <button class="cc-range-btn active" data-hours="24"  onclick="ccSetRange(24)">24h</button>
-                    <button class="cc-range-btn"        data-hours="168" onclick="ccSetRange(168)">7d</button>
-                    <button class="cc-range-btn"        data-hours="720" onclick="ccSetRange(720)">30d</button>
-                    <button class="cc-range-btn"        data-hours="2160" onclick="ccSetRange(2160)">90d</button>
-                    <button class="cc-range-btn"        data-hours="custom" onclick="ccOpenCustomRange()">Custom…</button>
+                    <button class="cc-range-btn ${(_ccRangeHours == null || _ccRangeHours === 24) && !_ccCustomFrom ? 'active' : ''}" data-hours="24"  onclick="ccSetRange(24)">24h</button>
+                    <button class="cc-range-btn ${_ccRangeHours === 168 && !_ccCustomFrom ? 'active' : ''}" data-hours="168" onclick="ccSetRange(168)">7d</button>
+                    <button class="cc-range-btn ${_ccRangeHours === 720 && !_ccCustomFrom ? 'active' : ''}" data-hours="720" onclick="ccSetRange(720)">30d</button>
+                    <button class="cc-range-btn ${_ccRangeHours === 2160 && !_ccCustomFrom ? 'active' : ''}" data-hours="2160" onclick="ccSetRange(2160)">90d</button>
+                    <button class="cc-range-btn ${_ccCustomFrom ? 'active' : ''}" data-hours="custom" onclick="ccOpenCustomRange()">Custom…</button>
                 </div>
                 <button class="cc-btn ghost sm" onclick="ccExportPdf()" title="Print / Save as PDF">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>
