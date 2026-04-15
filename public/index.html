@@ -1129,29 +1129,43 @@
             flex-shrink: 0;
         }
 
+        /* Gmail-style: the WHOLE conversation scrolls as one page.
+           No inner scroll on the message thread — let messages render at
+           their full natural height, page scrolls to read more. */
         .message-thread {
-            flex: 1 1 0;
-            min-height: 0;
-            height: 0; /* force flex basis to own the scroll */
-            overflow-y: auto !important;
-            overflow-x: hidden;
-            -webkit-overflow-scrolling: touch;
-            overscroll-behavior: contain;
+            flex: 0 0 auto;
+            overflow: visible;
             padding: 16px 20px 20px;
             display: flex;
             flex-direction: column;
             gap: 0;
+        }
+        /* The conversation panel itself owns the single scroll region */
+        .conversation-scroll-wrap {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
+            display: flex;
+            flex-direction: column;
             scrollbar-gutter: stable;
         }
-        /* Visible scrollbar so it's obvious it scrolls */
-        .message-thread::-webkit-scrollbar { width: 10px; }
-        .message-thread::-webkit-scrollbar-track { background: transparent; }
-        .message-thread::-webkit-scrollbar-thumb {
+        .conversation-scroll-wrap::-webkit-scrollbar { width: 10px; }
+        .conversation-scroll-wrap::-webkit-scrollbar-track { background: transparent; }
+        .conversation-scroll-wrap::-webkit-scrollbar-thumb {
             background: #d1d5db;
             border-radius: 8px;
             border: 2px solid #f5f6f8;
         }
-        .message-thread::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+        .conversation-scroll-wrap::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+        /* Sticky conversation header so subject + status stays in view while scrolling */
+        .conversation-scroll-wrap .conversation-header {
+            position: sticky; top: 0; z-index: 5;
+            background: #fff;
+        }
+        body.dark-mode .conversation-scroll-wrap .conversation-header { background: var(--bg-secondary); }
 
         /* Collapsed (default) = flat Gmail-style row */
         .message-card {
@@ -5871,10 +5885,6 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
                                 </div>
                             </div>
                             <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-                                <button class="msg-popout-btn" title="Open this message full-screen" onclick="event.stopPropagation(); openMessageFullscreen('${msg.id}')">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M21 3l-7 7"/><path d="M9 21H3v-6"/><path d="M3 21l7-7"/></svg>
-                                    View full
-                                </button>
                                 <span class="message-date">${dateStr}</span>
                                 <svg class="message-expand-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
                             </div>
@@ -5926,7 +5936,7 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
             const snoozedUntil = conv.snoozed_until ? new Date(conv.snoozed_until).toLocaleString() : '';
             container.style.cssText = 'display:flex; flex-direction:column; height:100%; min-height:0; overflow:hidden; flex:1 1 auto;';
             container.innerHTML = `
-                <div style="display:flex; flex-direction:column; flex:1 1 auto; height:100%; min-height:0; overflow:hidden;">
+                <div class="conversation-scroll-wrap">
                     ${restoreBanner}
                     <div class="conversation-header">
                         <div class="conv-title">${escapeHtml(conv.subject)}</div>
