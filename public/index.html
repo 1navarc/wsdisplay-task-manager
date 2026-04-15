@@ -13833,6 +13833,8 @@ function ccShellHtml() {
             .cc-live-tile .lbl{ font-size:10px; text-transform:uppercase; letter-spacing:.08em; opacity:.85 }
             .cc-live-tile .val{ font-size:24px; font-weight:800; margin-top:3px; line-height:1 }
             .cc-live-tile .sub{ font-size:11px; opacity:.85; margin-top:4px }
+            .cc-live-tile[onclick]{ transition:transform .12s ease, box-shadow .12s ease }
+            .cc-live-tile[onclick]:hover{ transform:translateY(-2px); box-shadow:0 12px 26px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.15) }
 
             /* ===== Junk-filter strip + modal ===== */
             .cc-junk-strip{
@@ -16260,16 +16262,26 @@ async function ccLiveTickerLoad() {
         const avgRespMs = summary.overall_first_response_avg_ms;
         const avgRespStr = avgRespMs ? (avgRespMs > 3600000 ? (avgRespMs/3600000).toFixed(1) + 'h' : Math.round(avgRespMs/60000) + 'm') : '—';
 
-        const tile = (cls, lbl, val, sub) =>
-            `<div class="cc-live-tile ${cls||''}"><div class="lbl">${lbl}</div><div class="val">${val}</div><div class="sub">${sub||''}</div></div>`;
+        // Stash items so the drilldown modal can reach them by tile id
+        window._ccLiveItems = items;
+
+        const tile = (cls, lbl, val, sub, drillKind) => {
+            const click = drillKind ? ` onclick="ccLiveDrill('${drillKind}')" style="cursor:pointer" title="Click to see ${ccEsc(lbl).toLowerCase()}"` : '';
+            const hint = drillKind ? '<span style="opacity:0.55;margin-left:4px">›</span>' : '';
+            return `<div class="cc-live-tile ${cls||''}"${click}>
+                <div class="lbl">${lbl}${hint}</div>
+                <div class="val">${val}</div>
+                <div class="sub">${sub||''}</div>
+            </div>`;
+        };
 
         el.innerHTML = [
-            tile(slaBreaches > 5 ? 'crit' : slaBreaches > 0 ? 'warn' : '', 'Open SLA breaches', slaBreaches.toLocaleString(), 'click below to triage'),
-            tile(oldestSecs > 86400 ? 'crit' : oldestSecs > 14400 ? 'warn' : '', 'Oldest unanswered', oldestStr, oldestSubj.slice(0, 32) || 'all caught up'),
-            tile(complaints > 0 ? 'warn' : '', 'Open complaints', complaints.toLocaleString(), 'in attention queue'),
-            tile(escalations > 0 ? 'warn' : '', 'Escalations', escalations.toLocaleString(), 'asking for manager'),
-            tile(volTone, 'Volume vs LW', todayVol.toLocaleString(), deltaStr ? deltaStr + ' vs same day last week' : 'no comparison data'),
-            tile('', 'Avg response (24h)', avgRespStr, 'first reply time'),
+            tile(slaBreaches > 5 ? 'crit' : slaBreaches > 0 ? 'warn' : '', 'Open SLA breaches', slaBreaches.toLocaleString(), 'click to triage', 'sla'),
+            tile(oldestSecs > 86400 ? 'crit' : oldestSecs > 14400 ? 'warn' : '', 'Oldest unanswered', oldestStr, oldestSubj.slice(0, 32) || 'all caught up', 'oldest'),
+            tile(complaints > 0 ? 'warn' : '', 'Open complaints', complaints.toLocaleString(), 'click to review', 'complaints'),
+            tile(escalations > 0 ? 'warn' : '', 'Escalations', escalations.toLocaleString(), 'asking for manager', 'escalations'),
+            tile(volTone, 'Volume vs LW', todayVol.toLocaleString(), deltaStr ? deltaStr + ' vs same day last week' : 'no comparison data', null),
+            tile('', 'Avg response (24h)', avgRespStr, 'first reply time', null),
         ].join('');
     } catch (e) {
         el.innerHTML = '<div class="cc-live-tile warn"><div class="lbl">Live ticker</div><div class="val">—</div><div class="sub">' + ccEsc(e.message) + '</div></div>';
@@ -16284,6 +16296,64 @@ function ccLiveTickerStart() {
         const ccEl = document.getElementById('commandCenterContainer');
         if (ccEl && ccEl.classList.contains('active')) ccLiveTickerLoad();
     }, 30000);
+}
+
+// Drilldown for the LIVE strip tiles — opens a list of the underlying
+// attention items so the user can jump straight to the offending threads.
+function ccLiveDrill(kind) {
+    const items = (window._ccLiveItems || []);
+    let title = '';
+    let filtered = [];
+    if (kind === 'sla') {
+        title = 'Open SLA breaches';
+        filtered = items.filter(i => i.item_type === 'sla_breach');
+        // newest breach first feels backwards — show the OLDEST first so they triage worst
+        filtered.sort((a, b) => new Date(a.detected_at || 0) - new Date(b.detected_at || 0));
+    } else if (kind === 'oldest') {
+        title = 'Oldest unanswered';
+        filtered = items.filter(i => i.item_type === 'sla_breach' && i.detected_at);
+        filtered.sort((a, b) => new Date(a.detected_at) - new Date(b.detected_at));
+    } else if (kind === 'complaints') {
+        title = 'Open complaints';
+        filtered = items.filter(i => i.item_type === 'complaint' || i.item_type === 'repeat_complaint');
+    } else if (kind === 'escalations') {
+        title = 'Escalations — asking for manager';
+        filtered = items.filter(i => i.item_type === 'escalation');
+    }
+
+    if (!filtered.length) {
+        ccShowModal(title, '<div style="padding:24px;text-align:center;color:#16a34a;font-size:14px">✓ Nothing here right now — all caught up.</div>');
+        return;
+    }
+
+    const sevColor = (sev) => sev === 'critical' || sev === 'high' ? '#b91c1c'
+        : sev === 'medium' ? '#b45309'
+        : '#475569';
+
+    const html = filtered.map(it => {
+        const ageSec = it.detected_at ? (Date.now() - new Date(it.detected_at).getTime()) / 1000 : null;
+        const age = ageSec == null ? ''
+            : ageSec > 86400 ? Math.floor(ageSec / 86400) + 'd'
+            : ageSec > 3600  ? Math.floor(ageSec / 3600)  + 'h'
+            : Math.floor(ageSec / 60) + 'm';
+        const tid = (it.gmail_thread_id || '').replace(/'/g, "\\'");
+        const cust = it.customer_email ? `<span style="color:#64748b;font-size:12px">· ${ccEsc(it.customer_email)}</span>` : '';
+        const reason = it.reason || it.snippet || '';
+        return `<div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin-bottom:8px;background:#fff;display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
+            <div style="flex:1;min-width:0">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px">
+                    ${it.severity ? `<span style="font-size:11px;font-weight:700;text-transform:uppercase;color:${sevColor(it.severity)};background:${sevColor(it.severity)}1a;padding:2px 8px;border-radius:6px">${ccEsc(it.severity)}</span>` : ''}
+                    ${age ? `<span style="font-size:12px;color:#64748b">${age} old</span>` : ''}
+                    ${cust}
+                </div>
+                <div style="font-weight:600;color:#0f172a;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ccEsc(it.title || '(no subject)')}</div>
+                ${reason ? `<div style="font-size:12px;color:#475569;margin-top:4px">${ccEsc(reason).slice(0, 220)}</div>` : ''}
+            </div>
+            ${tid ? `<button class="cc-btn sm" onclick="document.getElementById('ccIntelModal').style.display='none'; ccArchiveOpenThread('${tid}')" style="white-space:nowrap;flex-shrink:0">Open thread</button>` : ''}
+        </div>`;
+    }).join('');
+
+    ccShowModal(`${title} (${filtered.length})`, html);
 }
 
 async function ccIntelStatsLoad() {
