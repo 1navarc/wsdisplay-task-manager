@@ -1,6 +1,64 @@
 const router = require('express').Router();
+const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../config/database');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { sendGmailReply } = require('../services/gmail-sync');
+
+const SITE_URL = process.env.SITE_URL || 'https://wsmail.ws';
+
+function renderInviteEmail({ recipientName, inviterName, role, siteUrl }) {
+  const roleLabel = role === 'manager' ? 'Manager' : role === 'supervisor' ? 'Supervisor' : 'Rep';
+  const greeting = recipientName ? `Hi ${recipientName.split(' ')[0]},` : 'Hi there,';
+  const inviter = inviterName ? inviterName : 'Your team';
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f6fa;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1e293b">
+  <div style="max-width:560px;margin:0 auto;padding:32px 24px">
+    <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+      <div style="background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);padding:32px 28px;color:#fff">
+        <div style="font-size:13px;opacity:0.85;letter-spacing:0.5px;text-transform:uppercase;font-weight:600">wsmail.ws</div>
+        <div style="font-size:24px;font-weight:700;margin-top:8px">You're invited to the team</div>
+      </div>
+      <div style="padding:32px 28px;font-size:15px;line-height:1.6">
+        <p style="margin:0 0 16px">${greeting}</p>
+        <p style="margin:0 0 16px">${escapeHtml(inviter)} has invited you to join <strong>wsmail.ws</strong> as a <strong>${roleLabel}</strong>.</p>
+        <p style="margin:0 0 24px">wsmail.ws is your team's shared email workspace &mdash; handle customer conversations, track SLAs, and collaborate on replies all in one place.</p>
+        <div style="text-align:center;margin:28px 0">
+          <a href="${siteUrl}" style="display:inline-block;background:#4f46e5;color:#fff;font-weight:600;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px">Sign in to wsmail.ws &rarr;</a>
+        </div>
+        <div style="background:#f8fafc;border-radius:8px;padding:16px;margin-top:24px;font-size:13px;color:#475569">
+          <div style="font-weight:600;color:#1e293b;margin-bottom:6px">How to sign in</div>
+          <ol style="margin:0;padding-left:18px">
+            <li>Click the button above (or visit <a href="${siteUrl}" style="color:#4f46e5">${siteUrl.replace(/^https?:\/\//,'')}</a>)</li>
+            <li>Click <em>Sign in with Google</em></li>
+            <li>Choose the Google account matching this email address</li>
+          </ol>
+        </div>
+        <p style="margin:24px 0 0;color:#94a3b8;font-size:12px">If you weren't expecting this invite, you can safely ignore this email.</p>
+      </div>
+    </div>
+  </div>
+</body></html>`;
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+function parseInviteLine(line) {
+  // Accepts: "email" | "email, name" | "email, name, role" | "email, role"
+  const parts = line.split(/[,;\t]/).map(p => p.trim()).filter(Boolean);
+  if (!parts.length) return null;
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const validRoles = ['rep', 'supervisor', 'manager'];
+  const result = { email: null, name: null, role: null };
+  for (const part of parts) {
+    if (!result.email && emailRe.test(part)) { result.email = part.toLowerCase(); continue; }
+    if (!result.role && validRoles.includes(part.toLowerCase())) { result.role = part.toLowerCase(); continue; }
+    if (!result.name) { result.name = part; continue; }
+  }
+  return result.email ? result : null;
+}
 
 // GET /api/manager/employees - list all users
 // All roles can fetch the employee list (needed for team display, assignee dropdowns)
@@ -8,10 +66,183 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 router.get('/employees', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, email, name, role FROM users ORDER BY name'
+      `SELECT id, email, name, role,
+              (google_token IS NOT NULL) AS has_signed_in,
+              created_at
+         FROM users ORDER BY name NULLS LAST, email`
     );
     res.json(result.rows);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/manager/employees/invite - bulk invite team members (manager only)
+// Body: { invites: [{email, name?, role?}], default_role?, sender_mailbox?, send_email? }
+router.post('/employees/invite', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const { invites, default_role, sender_mailbox, send_email, raw_text } = req.body || {};
+    const validRoles = ['rep', 'supervisor', 'manager'];
+    const defaultRole = validRoles.includes(default_role) ? default_role : 'rep';
+    const shouldSendEmail = send_email !== false; // default true
+
+    // Build normalized list either from `invites` array or `raw_text` (multi-line paste)
+    let list = [];
+    if (Array.isArray(invites)) {
+      list = invites.map(inv => ({
+        email: (inv.email || '').trim().toLowerCase(),
+        name: (inv.name || '').trim() || null,
+        role: validRoles.includes(inv.role) ? inv.role : defaultRole
+      })).filter(inv => inv.email);
+    } else if (typeof raw_text === 'string') {
+      const lines = raw_text.split(/\r?\n/);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const parsed = parseInviteLine(trimmed);
+        if (parsed) {
+          list.push({
+            email: parsed.email,
+            name: parsed.name,
+            role: parsed.role || defaultRole
+          });
+        }
+      }
+    }
+
+    if (!list.length) {
+      return res.status(400).json({ error: 'No valid email addresses provided' });
+    }
+
+    // Figure out sender mailbox (must be connected). Fallback to first connected mailbox.
+    let senderEmail = null;
+    if (shouldSendEmail) {
+      if (sender_mailbox) {
+        const mb = await pool.query('SELECT email FROM mailboxes WHERE email = $1', [sender_mailbox]);
+        if (mb.rows.length) senderEmail = mb.rows[0].email;
+      }
+      if (!senderEmail) {
+        const firstMb = await pool.query('SELECT email FROM mailboxes ORDER BY created_at LIMIT 1');
+        if (firstMb.rows.length) senderEmail = firstMb.rows[0].email;
+      }
+    }
+
+    // Fetch inviter name for the email copy
+    let inviterName = 'A teammate';
+    if (req.session?.userId) {
+      const inviterRow = await pool.query('SELECT name, email FROM users WHERE id = $1', [req.session.userId]);
+      if (inviterRow.rows.length) {
+        inviterName = inviterRow.rows[0].name || inviterRow.rows[0].email || inviterName;
+      }
+    }
+
+    const results = [];
+    for (const inv of list) {
+      const r = { email: inv.email, role: inv.role, status: 'pending', email_sent: false };
+      try {
+        const existing = await pool.query('SELECT id, email, name, role, google_token FROM users WHERE email = $1', [inv.email]);
+        if (existing.rows.length) {
+          // Update role if it changed
+          if (existing.rows[0].role !== inv.role) {
+            await pool.query('UPDATE users SET role = $1 WHERE email = $2', [inv.role, inv.email]);
+            r.status = 'updated';
+          } else {
+            r.status = 'already_exists';
+          }
+          r.has_signed_in = !!existing.rows[0].google_token;
+        } else {
+          // Create user row with no google_token - first sign-in will populate it
+          const defaultName = inv.name || inv.email.split('@')[0];
+          await pool.query(
+            'INSERT INTO users (id, email, name, role) VALUES ($1, $2, $3, $4)',
+            [uuidv4(), inv.email, defaultName, inv.role]
+          );
+          r.status = 'created';
+          r.has_signed_in = false;
+        }
+
+        // Send invite email
+        if (shouldSendEmail && senderEmail) {
+          try {
+            const html = renderInviteEmail({
+              recipientName: inv.name,
+              inviterName,
+              role: inv.role,
+              siteUrl: SITE_URL
+            });
+            await sendGmailReply(
+              pool,
+              senderEmail,
+              inv.email,
+              `You've been invited to wsmail.ws`,
+              html,
+              null
+            );
+            r.email_sent = true;
+          } catch (mailErr) {
+            r.email_sent = false;
+            r.email_error = mailErr.message;
+          }
+        }
+      } catch (err) {
+        r.status = 'error';
+        r.error = err.message;
+      }
+      results.push(r);
+    }
+
+    const summary = {
+      total: results.length,
+      created: results.filter(r => r.status === 'created').length,
+      updated: results.filter(r => r.status === 'updated').length,
+      already_exists: results.filter(r => r.status === 'already_exists').length,
+      errors: results.filter(r => r.status === 'error').length,
+      emails_sent: results.filter(r => r.email_sent).length
+    };
+
+    res.json({ summary, sender_mailbox: senderEmail, results });
+  } catch (err) {
+    console.error('Invite error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/manager/employees/:id/resend-invite - resend invite email to a specific user (manager only)
+router.post('/employees/:id/resend-invite', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { sender_mailbox } = req.body || {};
+    const userRow = await pool.query('SELECT id, email, name, role FROM users WHERE id = $1', [id]);
+    if (!userRow.rows.length) return res.status(404).json({ error: 'User not found' });
+    const user = userRow.rows[0];
+
+    let senderEmail = null;
+    if (sender_mailbox) {
+      const mb = await pool.query('SELECT email FROM mailboxes WHERE email = $1', [sender_mailbox]);
+      if (mb.rows.length) senderEmail = mb.rows[0].email;
+    }
+    if (!senderEmail) {
+      const firstMb = await pool.query('SELECT email FROM mailboxes ORDER BY created_at LIMIT 1');
+      if (firstMb.rows.length) senderEmail = firstMb.rows[0].email;
+    }
+    if (!senderEmail) return res.status(400).json({ error: 'No connected mailbox to send from' });
+
+    let inviterName = 'A teammate';
+    if (req.session?.userId) {
+      const inviterRow = await pool.query('SELECT name, email FROM users WHERE id = $1', [req.session.userId]);
+      if (inviterRow.rows.length) inviterName = inviterRow.rows[0].name || inviterRow.rows[0].email || inviterName;
+    }
+
+    const html = renderInviteEmail({
+      recipientName: user.name,
+      inviterName,
+      role: user.role,
+      siteUrl: SITE_URL
+    });
+    await sendGmailReply(pool, senderEmail, user.email, `You've been invited to wsmail.ws`, html, null);
+    res.json({ ok: true, email: user.email, sender: senderEmail });
+  } catch (err) {
+    console.error('Resend invite error:', err);
     res.status(500).json({ error: err.message });
   }
 });

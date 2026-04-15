@@ -308,12 +308,33 @@ async function detectConflict({ product, field, newValue, runId, sourceRef }) {
 
 // ---------- Writers ----------
 
-async function writeQaExample({ qa, runId, sourceRef }) {
+// Review-queue helpers. Read once per run via getReviewConfig().
+async function getReviewConfig() {
+  try {
+    const r = await pool.query(
+      `SELECT value FROM app_settings WHERE key = 'review_queue_config'`
+    );
+    if (!r.rows.length) return { require_review_for_ingestion: true, require_review_for_facts: true, require_review_for_qa: true };
+    const v = r.rows[0].value || {};
+    return {
+      require_review_for_ingestion: v.require_review_for_ingestion !== false,
+      require_review_for_facts: v.require_review_for_facts !== false,
+      require_review_for_qa: v.require_review_for_qa !== false,
+    };
+  } catch {
+    return { require_review_for_ingestion: true, require_review_for_facts: true, require_review_for_qa: true };
+  }
+}
+
+async function writeQaExample({ qa, runId, sourceRef, reviewConfig }) {
+  const gated = (reviewConfig && reviewConfig.require_review_for_ingestion && reviewConfig.require_review_for_qa);
+  const status = gated ? 'pending_review' : 'active';
+  const isActive = !gated;
   await pool.query(
     `INSERT INTO ai_training_rules
        (rule_type, email_category, content, example_email, example_response,
         source, source_ref, status, ingestion_run_id, is_active)
-     VALUES ('example', $1, $2, $3, $4, 'email_ingest', $5, 'active', $6, true)`,
+     VALUES ('example', $1, $2, $3, $4, 'email_ingest', $5, $7, $6, $8)`,
     [
       qa.category || 'general',
       (qa.summary || qa.question || '').slice(0, 200),
@@ -321,13 +342,24 @@ async function writeQaExample({ qa, runId, sourceRef }) {
       qa.answer || '',
       sourceRef,
       runId,
+      status,
+      isActive,
     ]
   );
 }
 
-async function writeFact({ fact, runId, sourceRef, existingSource }) {
-  // If an ERP value already exists, don't overwrite — store as superseded.
-  const status = existingSource === 'erp' ? 'superseded' : 'active';
+async function writeFact({ fact, runId, sourceRef, existingSource, reviewConfig }) {
+  // If an ERP value already exists, store as superseded (never overwrite ERP).
+  // Otherwise, use review config to decide pending_review vs active.
+  let status = 'active';
+  let isPublished = true;
+  if (existingSource === 'erp') {
+    status = 'superseded';
+    isPublished = false;
+  } else if (reviewConfig && reviewConfig.require_review_for_ingestion && reviewConfig.require_review_for_facts) {
+    status = 'pending_review';
+    isPublished = false;
+  }
   await pool.query(
     `INSERT INTO knowledge_base_articles
        (title, content, category, source, source_ref, status, ingestion_run_id, is_published, created_at, updated_at)
@@ -339,7 +371,7 @@ async function writeFact({ fact, runId, sourceRef, existingSource }) {
       sourceRef,
       status,
       runId,
-      status === 'active',
+      isPublished,
     ]
   );
 }
@@ -382,6 +414,7 @@ async function processRun(runId, filters) {
   const mailboxEmail = filters.mailbox_email;
   const gmail = await getGmailClientForTraining(mailboxEmail);
   const q = buildGmailQuery(filters);
+  const reviewConfig = await getReviewConfig();
 
   await updateRunStatus(runId, { current_status_line: `Listing threads (${q})…` });
 
@@ -460,7 +493,7 @@ async function processRun(runId, filters) {
       const flaggedConflicts = [];
       // Write Q/A
       for (const qa of (parsed.qa || [])) {
-        await writeQaExample({ qa: { ...qa, summary: parsed.summary }, runId, sourceRef: tid });
+        await writeQaExample({ qa: { ...qa, summary: parsed.summary }, runId, sourceRef: tid, reviewConfig });
         qaCreated++;
       }
       // Write facts (with conflict check)
@@ -473,7 +506,7 @@ async function processRun(runId, filters) {
           conflictsCreated++;
           flaggedConflicts.push({ ...fact, oldValue: c.oldValue, oldSource: c.existingSource });
         }
-        await writeFact({ fact, runId, sourceRef: tid, existingSource: c.existingSource });
+        await writeFact({ fact, runId, sourceRef: tid, existingSource: c.existingSource, reviewConfig });
         factsCreated++;
       }
 
@@ -606,6 +639,186 @@ async function getRunLog(runId, limit = 500) {
   return r.rows;
 }
 
+// ---------- Review queue ----------
+
+async function listPendingQa(limit = 200) {
+  const r = await pool.query(
+    `SELECT id, rule_type, email_category, content, example_email, example_response,
+            source, source_ref, ingestion_run_id, created_at
+       FROM ai_training_rules
+      WHERE status = 'pending_review' AND source = 'email_ingest'
+      ORDER BY created_at DESC LIMIT $1`,
+    [limit]
+  );
+  return r.rows;
+}
+
+async function listPendingFacts(limit = 200) {
+  const r = await pool.query(
+    `SELECT id, title, content, category, source, source_ref, ingestion_run_id, created_at
+       FROM knowledge_base_articles
+      WHERE status = 'pending_review' AND source = 'email_ingest'
+      ORDER BY created_at DESC LIMIT $1`,
+    [limit]
+  );
+  return r.rows;
+}
+
+async function decideQa(id, decision, userId, edit = null) {
+  // decision: 'approved' | 'rejected' | 'edited'
+  if (decision === 'rejected') {
+    await pool.query(
+      `UPDATE ai_training_rules
+          SET status='rejected', is_active=false, review_decision='rejected',
+              reviewed_at=NOW(), reviewed_by=$2
+        WHERE id=$1`,
+      [id, userId || null]
+    );
+  } else if (decision === 'edited' && edit) {
+    await pool.query(
+      `UPDATE ai_training_rules
+          SET content = COALESCE($3, content),
+              example_email = COALESCE($4, example_email),
+              example_response = COALESCE($5, example_response),
+              email_category = COALESCE($6, email_category),
+              status='active', is_active=true, review_decision='edited',
+              reviewed_at=NOW(), reviewed_by=$2
+        WHERE id=$1`,
+      [id, userId || null, edit.content || null, edit.example_email || null,
+       edit.example_response || null, edit.email_category || null]
+    );
+  } else {
+    // approved as-is
+    await pool.query(
+      `UPDATE ai_training_rules
+          SET status='active', is_active=true, review_decision='approved',
+              reviewed_at=NOW(), reviewed_by=$2
+        WHERE id=$1`,
+      [id, userId || null]
+    );
+  }
+}
+
+async function decideFact(id, decision, userId, edit = null) {
+  if (decision === 'rejected') {
+    await pool.query(
+      `UPDATE knowledge_base_articles
+          SET status='rejected', is_published=false, review_decision='rejected',
+              reviewed_at=NOW(), reviewed_by=$2
+        WHERE id=$1`,
+      [id, userId || null]
+    );
+  } else if (decision === 'edited' && edit) {
+    await pool.query(
+      `UPDATE knowledge_base_articles
+          SET title = COALESCE($3, title),
+              content = COALESCE($4, content),
+              category = COALESCE($5, category),
+              status='active', is_published=true, review_decision='edited',
+              reviewed_at=NOW(), reviewed_by=$2, updated_at=NOW()
+        WHERE id=$1`,
+      [id, userId || null, edit.title || null, edit.content || null, edit.category || null]
+    );
+  } else {
+    await pool.query(
+      `UPDATE knowledge_base_articles
+          SET status='active', is_published=true, review_decision='approved',
+              reviewed_at=NOW(), reviewed_by=$2, updated_at=NOW()
+        WHERE id=$1`,
+      [id, userId || null]
+    );
+  }
+}
+
+async function getReviewConfigPublic() {
+  return await getReviewConfig();
+}
+
+async function saveReviewConfig(patch) {
+  const current = await getReviewConfig();
+  const next = { ...current, ...patch };
+  await pool.query(
+    `INSERT INTO app_settings (key, value, updated_at) VALUES ($1, $2, NOW())
+     ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+    ['review_queue_config', JSON.stringify(next)]
+  );
+  return next;
+}
+
+// ---------- Conflicts ----------
+
+async function listConflicts({ status = 'pending', limit = 200 } = {}) {
+  const r = await pool.query(
+    `SELECT * FROM knowledge_conflicts WHERE status = $1 ORDER BY new_created_at DESC LIMIT $2`,
+    [status, limit]
+  );
+  return r.rows;
+}
+
+async function resolveConflict(id, resolution, userId, customValue = null) {
+  // resolution: 'keep_old' | 'keep_new' | 'custom' | 'dismissed'
+  const c = await pool.query(`SELECT * FROM knowledge_conflicts WHERE id = $1`, [id]);
+  if (!c.rows.length) throw new Error('Conflict not found');
+  const conflict = c.rows[0];
+  let resolutionValue = null;
+
+  if (resolution === 'keep_old') {
+    resolutionValue = conflict.old_value;
+    // Delete the newly-ingested fact matching new_source_ref so it doesn't linger
+    if (conflict.new_source_ref) {
+      await pool.query(
+        `UPDATE knowledge_base_articles
+            SET status='rejected', is_published=false
+          WHERE source_ref = $1 AND source = 'email_ingest' AND status = 'pending_review'`,
+        [conflict.new_source_ref]
+      );
+    }
+  } else if (resolution === 'keep_new') {
+    resolutionValue = conflict.new_value;
+    // Mark the older article as superseded
+    await pool.query(
+      `UPDATE knowledge_base_articles
+          SET status='superseded', is_published=false
+        WHERE lower(title) = lower($1) AND category = $2 AND content = $3 AND status = 'active'`,
+      [conflict.product, conflict.field, conflict.old_value]
+    );
+    // Activate the new one if it was pending_review
+    if (conflict.new_source_ref) {
+      await pool.query(
+        `UPDATE knowledge_base_articles
+            SET status='active', is_published=true, review_decision='approved',
+                reviewed_at=NOW(), reviewed_by=$2
+          WHERE source_ref = $1 AND source = 'email_ingest' AND status = 'pending_review'`,
+        [conflict.new_source_ref, userId || null]
+      );
+    }
+  } else if (resolution === 'custom') {
+    resolutionValue = customValue;
+    // Supersede both and create a new manual entry
+    await pool.query(
+      `UPDATE knowledge_base_articles
+          SET status='superseded', is_published=false
+        WHERE lower(title) = lower($1) AND category = $2
+          AND (content = $3 OR content = $4)`,
+      [conflict.product, conflict.field, conflict.old_value, conflict.new_value]
+    );
+    await pool.query(
+      `INSERT INTO knowledge_base_articles
+         (title, content, category, source, status, is_published, created_at, updated_at)
+       VALUES ($1, $2, $3, 'manual', 'active', true, NOW(), NOW())`,
+      [conflict.product, customValue, conflict.field]
+    );
+  }
+
+  await pool.query(
+    `UPDATE knowledge_conflicts
+        SET status = $2, resolution = $3, resolution_value = $4,
+            resolved_by = $5, resolved_at = NOW()
+      WHERE id = $1`,
+    [id, resolution === 'dismissed' ? 'dismissed' : 'resolved', resolution, resolutionValue, userId || null]
+  );
+}
+
 module.exports = {
   DEFAULT_FILTERS,
   getFilterConfig,
@@ -615,4 +828,14 @@ module.exports = {
   getRunStatus,
   listRuns,
   getRunLog,
+  // Review queue
+  listPendingQa,
+  listPendingFacts,
+  decideQa,
+  decideFact,
+  getReviewConfigPublic,
+  saveReviewConfig,
+  // Conflicts
+  listConflicts,
+  resolveConflict,
 };

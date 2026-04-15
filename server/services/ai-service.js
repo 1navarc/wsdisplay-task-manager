@@ -639,5 +639,6 @@ module.exports = {
   classifyEmail,
   searchKnowledgeBase,
   generateDraftReply,
-  processNewMessage
+  processNewMessage,
+  getGenAI
 };

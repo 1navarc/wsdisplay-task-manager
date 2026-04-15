@@ -8,6 +8,8 @@
     <link rel="apple-touch-icon" href="/favicon.svg">
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.52.0/dist/apexcharts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -1559,6 +1561,161 @@
             overflow-y: auto;
             background: #f3f4f6;
             z-index: 100;
+        }
+
+        /* ===== COMMAND CENTER ===== */
+        .cc-container {
+            display: none;
+            position: fixed;
+            inset: 0;
+            overflow-y: auto;
+            background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+            z-index: 100;
+        }
+        .cc-container.active { display: block; }
+        body.dark-mode .cc-container { background: linear-gradient(180deg,#0f172a,#1e293b); color:#e2e8f0 }
+        .cc-wrap { max-width: 1400px; margin: 0 auto; padding: 28px 32px 80px; }
+        .cc-header { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:20px; }
+        .cc-title { font-size:28px; font-weight:800; background:linear-gradient(135deg,#4f46e5,#ec4899); -webkit-background-clip:text; background-clip:text; color:transparent; letter-spacing:-0.02em; }
+        .cc-subtitle { font-size:13px; color:#64748b; margin-top:4px; }
+        .cc-back-btn { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; color:#475569; display:inline-flex; align-items:center; gap:6px; }
+        .cc-back-btn:hover { background:#f8fafc; border-color:#cbd5e1; }
+        body.dark-mode .cc-back-btn { background:#1e293b; border-color:#334155; color:#cbd5e1; }
+
+        /* KPI hero cards with animated number counters */
+        .cc-kpi-row { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:14px; margin-bottom:24px; }
+        .cc-kpi {
+            background:#fff; border-radius:16px; padding:18px 20px;
+            box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04);
+            position:relative; overflow:hidden;
+            transition: transform .2s ease, box-shadow .2s ease;
+        }
+        .cc-kpi:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(15,23,42,0.08); }
+        body.dark-mode .cc-kpi { background:#1e293b; border:1px solid #334155; }
+        .cc-kpi::before {
+            content:''; position:absolute; top:0; left:0; right:0; height:3px;
+            background:var(--kpi-accent, #4f46e5);
+        }
+        .cc-kpi-label { font-size:11px; letter-spacing:0.8px; text-transform:uppercase; color:#64748b; font-weight:600; }
+        .cc-kpi-value { font-size:34px; font-weight:800; color:#0f172a; letter-spacing:-0.02em; margin-top:6px; font-variant-numeric:tabular-nums; }
+        body.dark-mode .cc-kpi-value { color:#f1f5f9; }
+        .cc-kpi-sub { font-size:12px; color:#64748b; margin-top:4px; display:flex; align-items:center; gap:4px; }
+        .cc-kpi-delta { font-weight:700; font-size:12px; }
+        .cc-kpi-delta.up { color:#dc2626; } /* up = worse for response time */
+        .cc-kpi-delta.down { color:#059669; }
+        .cc-kpi-delta.flat { color:#94a3b8; }
+        .cc-kpi.clickable { cursor:pointer; }
+        .cc-kpi.clickable::after {
+            content:'↗'; position:absolute; top:12px; right:14px; color:#cbd5e1; font-size:14px; font-weight:700;
+            transition: transform .2s ease, color .2s ease;
+        }
+        .cc-kpi.clickable:hover::after { color:#4f46e5; transform: translate(2px,-2px); }
+
+        /* Section cards */
+        .cc-section { background:#fff; border-radius:16px; padding:22px 24px; margin-bottom:18px; box-shadow:0 1px 3px rgba(15,23,42,0.06); }
+        body.dark-mode .cc-section { background:#1e293b; border:1px solid #334155; }
+        .cc-section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:12px; flex-wrap:wrap; }
+        .cc-section-title { font-size:16px; font-weight:700; color:#0f172a; display:flex; align-items:center; gap:8px; }
+        body.dark-mode .cc-section-title { color:#f1f5f9; }
+        .cc-section-desc { font-size:12px; color:#64748b; }
+        .cc-btn { background:#4f46e5; color:#fff; border:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; transition: background .15s; }
+        .cc-btn:hover { background:#4338ca; }
+        .cc-btn:disabled { opacity:.6; cursor:not-allowed; }
+        .cc-btn.ghost { background:transparent; color:#475569; border:1px solid #e2e8f0; }
+        .cc-btn.ghost:hover { background:#f8fafc; }
+        body.dark-mode .cc-btn.ghost { color:#cbd5e1; border-color:#334155; background:transparent; }
+        .cc-btn.sm { padding:6px 10px; font-size:12px; }
+        .cc-btn.warn { background:#f59e0b; }
+        .cc-btn.warn:hover { background:#d97706; }
+        .cc-btn.danger { background:#ef4444; }
+        .cc-btn.success { background:#059669; }
+
+        /* Date range pill */
+        .cc-range-pill { display:inline-flex; background:#f1f5f9; border-radius:10px; padding:3px; gap:2px; }
+        body.dark-mode .cc-range-pill { background:#1e293b; }
+        .cc-range-btn { background:transparent; border:none; padding:6px 12px; font-size:12px; font-weight:600; color:#64748b; cursor:pointer; border-radius:8px; transition: background .15s, color .15s; }
+        .cc-range-btn:hover { color:#0f172a; background:#fff; }
+        body.dark-mode .cc-range-btn:hover { color:#fff; background:#334155; }
+        .cc-range-btn.active { background:#fff; color:#4f46e5; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+        body.dark-mode .cc-range-btn.active { background:#4f46e5; color:#fff; }
+
+        /* Two-col charts grid */
+        .cc-charts-grid { display:grid; grid-template-columns: 1fr 1fr; gap:18px; margin-bottom:18px; }
+        @media (max-width: 900px) { .cc-charts-grid { grid-template-columns: 1fr; } }
+
+        /* Drilldown modal */
+        .cc-modal-overlay { display:none; position:fixed; inset:0; background:rgba(15,23,42,0.5); z-index:500; align-items:flex-start; justify-content:center; padding:40px 20px; overflow-y:auto; }
+        .cc-modal-overlay.active { display:flex; }
+        .cc-modal { background:#fff; border-radius:16px; width:100%; max-width:900px; max-height:calc(100vh - 80px); overflow:hidden; display:flex; flex-direction:column; box-shadow:0 25px 50px rgba(15,23,42,0.25); }
+        body.dark-mode .cc-modal { background:#1e293b; color:#e2e8f0; }
+        .cc-modal-header { padding:20px 24px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; }
+        body.dark-mode .cc-modal-header { border-bottom-color:#334155; }
+        .cc-modal-title { font-size:18px; font-weight:700; }
+        .cc-modal-close { background:none; border:none; font-size:22px; cursor:pointer; color:#94a3b8; padding:4px 8px; border-radius:6px; }
+        .cc-modal-close:hover { background:#f1f5f9; color:#475569; }
+        .cc-modal-body { padding:20px 24px; overflow-y:auto; }
+
+        /* Thread row in drilldowns */
+        .cc-thread-row { display:grid; grid-template-columns: 1fr auto; gap:12px; padding:12px 14px; border:1px solid #e2e8f0; border-radius:10px; margin-bottom:8px; transition: border-color .15s; background:#fff; }
+        .cc-thread-row:hover { border-color:#c7d2fe; }
+        body.dark-mode .cc-thread-row { background:#0f172a; border-color:#334155; }
+        .cc-thread-subject { font-weight:600; font-size:14px; color:#0f172a; margin-bottom:4px; }
+        body.dark-mode .cc-thread-subject { color:#f1f5f9; }
+        .cc-thread-meta { font-size:12px; color:#64748b; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+        .cc-thread-actions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+        .cc-badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; }
+        .cc-badge.high { background:#fee2e2; color:#991b1b; }
+        .cc-badge.medium { background:#fef3c7; color:#92400e; }
+        .cc-badge.low { background:#e0e7ff; color:#3730a3; }
+        body.dark-mode .cc-badge.high { background:#7f1d1d; color:#fecaca; }
+        body.dark-mode .cc-badge.medium { background:#78350f; color:#fde68a; }
+        body.dark-mode .cc-badge.low { background:#312e81; color:#c7d2fe; }
+
+        /* Rep tiles */
+        .cc-rep-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:12px; }
+        .cc-rep-tile { border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; background:#fff; cursor:pointer; transition: transform .2s, border-color .2s, box-shadow .2s; }
+        body.dark-mode .cc-rep-tile { background:#0f172a; border-color:#334155; }
+        .cc-rep-tile:hover { transform: translateY(-2px); border-color:#c7d2fe; box-shadow:0 6px 16px rgba(99,102,241,0.12); }
+        .cc-rep-name { font-weight:700; font-size:14px; color:#0f172a; }
+        body.dark-mode .cc-rep-name { color:#f1f5f9; }
+        .cc-rep-email { font-size:11px; color:#94a3b8; margin-bottom:8px; }
+        .cc-rep-stats { display:flex; gap:14px; font-size:12px; }
+        .cc-rep-stat-label { color:#64748b; font-size:10px; text-transform:uppercase; letter-spacing:0.6px; }
+        .cc-rep-stat-value { font-weight:700; color:#0f172a; font-size:14px; }
+        body.dark-mode .cc-rep-stat-value { color:#f1f5f9; }
+        .cc-rep-trend { display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; margin-top:8px; }
+        .cc-rep-trend.improving { background:#dcfce7; color:#166534; }
+        .cc-rep-trend.degrading { background:#fee2e2; color:#991b1b; }
+        .cc-rep-trend.flat { background:#f1f5f9; color:#475569; }
+
+        /* Notes list */
+        .cc-note { background:#fffbeb; border-left:3px solid #f59e0b; border-radius:8px; padding:12px 14px; margin-bottom:10px; }
+        body.dark-mode .cc-note { background:#78350f; color:#fde68a; border-left-color:#f59e0b; }
+        .cc-note.pinned { background:#fef9c3; border-left-color:#eab308; }
+        .cc-note-meta { font-size:11px; color:#92400e; display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+        body.dark-mode .cc-note-meta { color:#fde68a; }
+        .cc-note-body { font-size:14px; color:#1e293b; white-space:pre-wrap; line-height:1.5; }
+        body.dark-mode .cc-note-body { color:#fde68a; }
+
+        /* Anomaly card */
+        .cc-anomaly { background:#fef2f2; border:1px solid #fecaca; border-radius:10px; padding:12px 14px; margin-bottom:10px; }
+        .cc-anomaly.severity-medium { background:#fffbeb; border-color:#fde68a; }
+        .cc-anomaly.severity-low { background:#eff6ff; border-color:#bfdbfe; }
+        .cc-anomaly-title { font-weight:700; font-size:14px; color:#991b1b; margin-bottom:4px; }
+        .cc-anomaly.severity-medium .cc-anomaly-title { color:#92400e; }
+        .cc-anomaly.severity-low .cc-anomaly-title { color:#1e40af; }
+        .cc-anomaly-hypothesis { font-size:12px; color:#64748b; margin-top:6px; font-style:italic; }
+
+        /* Loading skeleton */
+        .cc-skeleton { background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%); background-size: 200% 100%; animation: ccSkel 1.6s infinite; border-radius:8px; height:20px; }
+        @keyframes ccSkel { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .cc-wrap { padding: 16px 14px 80px; }
+            .cc-title { font-size: 22px; }
+            .cc-kpi-value { font-size:26px; }
+            .cc-section { padding:16px; }
         }
         .analytics-content {
             padding: 24px 40px;
@@ -4235,6 +4392,9 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
 
             <div class="sidebar-section-label" style="margin-top:12px;">Navigation</div>
             <div class="views-list">
+                <div class="view-item" onclick="switchTab('commandcenter')" id="sidebarCommandCenter" data-role-min="supervisor">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px;"><circle cx="12" cy="12" r="9"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="3"/></svg>Command Center
+                </div>
                 <div class="view-item" onclick="switchTab('analytics')" id="sidebarAnalytics" data-role-min="supervisor">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px;"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>Analytics
                 </div>
@@ -4416,6 +4576,8 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
         <div id="tasksContainer" class="tasks-page-container"></div>
         <div id="unansweredContainer" class="unanswered-container"></div>
         <div id="knowledgebaseContainer" class="knowledgebase-container"></div>
+        <!-- COMMAND CENTER (full-page overlay, managers + supervisors) -->
+        <div id="commandCenterContainer" class="cc-container"></div>
 
         <!-- FEEDBACK SUBMIT MODAL -->
         <div id="feedbackModal" class="feedback-modal-overlay" onclick="if(event.target===this)closeFeedbackModal()">
@@ -4669,6 +4831,22 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
                         loadAllTags();
                         startNotifPolling();
                         loadCannedResponses();
+                        // Deep-link: ?tab=commandcenter from daily report email
+                        try {
+                            const params = new URLSearchParams(window.location.search);
+                            const requestedTab = params.get('tab');
+                            if (requestedTab) {
+                                const role = (currentUser && currentUser.role) || 'rep';
+                                const managerTabs = ['commandcenter', 'analytics', 'settings'];
+                                if (managerTabs.includes(requestedTab) && role !== 'manager' && role !== 'supervisor') {
+                                    // not allowed; stay on inbox
+                                } else {
+                                    setTimeout(() => { try { switchTab(requestedTab); } catch(e) { console.error('Deep-link tab failed:', e); } }, 300);
+                                }
+                                // Clean the URL so refresh doesn't re-trigger
+                                try { window.history.replaceState({}, '', window.location.pathname); } catch(e) {}
+                            }
+                        } catch(e) { console.error('Tab deep-link parse failed:', e); }
                     }
                 })
                 .catch(err => {
@@ -8104,6 +8282,8 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
             document.getElementById('tasksContainer').classList.toggle('active', tab === 'tasks');
             document.getElementById('unansweredContainer').classList.toggle('active', tab === 'unanswered');
             document.getElementById('knowledgebaseContainer').classList.toggle('active', tab === 'knowledgebase');
+            const ccEl = document.getElementById('commandCenterContainer');
+            if (ccEl) ccEl.classList.toggle('active', tab === 'commandcenter');
 
             // Hide filters and search when not inbox
             const statusTabs = document.getElementById('statusFilterTabs');
@@ -8117,6 +8297,7 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
             if (tab === 'tasks') loadTasksPage();
             if (tab === 'unanswered') { loadUnanswered(); loadUnansweredCount(); }
             if (tab === 'knowledgebase') loadKnowledgeBasePage();
+            if (tab === 'commandcenter') loadCommandCenter();
         }
 
         // ===== VIEWS =====
@@ -9240,18 +9421,71 @@ function settingsToast(msg, type) {
 
 // ===== USER MANAGEMENT TAB =====
 async function loadSettingsUsers(content) {
-    const res = await fetch('/api/manager/employees', { credentials: 'include' });
-    if (!res.ok) throw new Error('Failed to load users');
-    const users = await res.json();
+    const [usersRes, mailboxesRes] = await Promise.all([
+        fetch('/api/manager/employees', { credentials: 'include' }),
+        fetch('/api/mailboxes', { credentials: 'include' })
+    ]);
+    if (!usersRes.ok) throw new Error('Failed to load users');
+    const users = await usersRes.json();
+    const mailboxes = mailboxesRes.ok ? await mailboxesRes.json() : [];
 
     const avatarColors = ['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#14b8a6'];
 
+    const pendingCount = users.filter(u => u.has_signed_in === false).length;
+
     content.innerHTML = `
         <div class="settings-section-title">User Management</div>
-        <div class="settings-section-desc">Manage team members, their roles, and account status.</div>
+        <div class="settings-section-desc">Invite team members and manage their roles. Invitees sign in with Google using the email address you invited.</div>
+
+        <div class="settings-card" id="bulkInviteCard">
+            <div class="settings-card-header">
+                <div class="settings-card-title">Invite Team Members</div>
+                <div class="settings-card-desc">Paste a list of emails or upload a CSV. An invitation email will be sent to each person with a sign-in link.</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr;gap:14px;padding:4px 0">
+                <div>
+                    <label style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;display:block">Emails to invite</label>
+                    <textarea id="bulkInviteText" rows="5" placeholder="One per line. Accepted formats:&#10;  manny@wsdisplay.com&#10;  manny@wsdisplay.com, Manny Smith&#10;  manny@wsdisplay.com, Manny Smith, manager&#10;  manny@wsdisplay.com, manager" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;resize:vertical"></textarea>
+                    <div style="display:flex;align-items:center;gap:10px;margin-top:8px;font-size:13px;color:#6b7280">
+                        <span>or</span>
+                        <input type="file" id="bulkInviteCsv" accept=".csv,.txt" style="flex:1;font-size:13px" onchange="loadBulkInviteCsv()">
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+                    <div>
+                        <label style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;display:block">Default role</label>
+                        <select id="bulkInviteRole" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px">
+                            <option value="rep">Rep</option>
+                            <option value="supervisor">Supervisor</option>
+                            <option value="manager">Manager</option>
+                        </select>
+                        <div style="font-size:11px;color:#9ca3af;margin-top:4px">Used when a line doesn't specify a role.</div>
+                    </div>
+                    <div>
+                        <label style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;display:block">Send invites from</label>
+                        <select id="bulkInviteSender" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px">
+                            ${mailboxes.length === 0 ? '<option value="">No connected mailboxes</option>' : mailboxes.map(m => `<option value="${escapeHtml(m.email)}">${escapeHtml(m.email)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;display:block">&nbsp;</label>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;height:38px">
+                            <input type="checkbox" id="bulkInviteSendEmail" checked>
+                            Send invitation emails
+                        </label>
+                    </div>
+                </div>
+                <div style="display:flex;gap:10px;align-items:center">
+                    <button class="settings-btn settings-btn-primary" onclick="sendBulkInvites()" id="bulkInviteBtn">Send Invitations</button>
+                    <div id="bulkInviteStatus" style="font-size:13px;color:#6b7280"></div>
+                </div>
+                <div id="bulkInviteResult" style="display:none"></div>
+            </div>
+        </div>
+
         <div class="settings-card">
             <div class="settings-card-header">
-                <div class="settings-card-title">Team Members (${users.length})</div>
+                <div class="settings-card-title">Team Members (${users.length}${pendingCount > 0 ? ` · ${pendingCount} pending` : ''})</div>
             </div>
             <table class="settings-table">
                 <thead>
@@ -9261,14 +9495,19 @@ async function loadSettingsUsers(content) {
                         <th>Email</th>
                         <th>Role</th>
                         <th>Status</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
                     ${users.map((u, i) => {
                         const initials = (u.name || u.email || '?').split(' ').map(w => w[0]).join('').substring(0,2).toUpperCase();
                         const color = avatarColors[i % avatarColors.length];
-                        const isActive = u.is_active !== false;
-                        return `<tr>
+                        const hasSignedIn = u.has_signed_in !== false;
+                        const statusLabel = hasSignedIn ? 'Online' : 'Pending invite';
+                        const statusClass = hasSignedIn ? 'settings-status-active' : '';
+                        const dotColor = hasSignedIn ? '#059669' : '#f59e0b';
+                        const rowStyle = hasSignedIn ? '' : 'background:#fffbeb';
+                        return `<tr style="${rowStyle}">
                             <td><div class="settings-avatar" style="background:${color}">${initials}</div></td>
                             <td style="font-weight:600">${escapeHtml(u.name || 'Unknown')}</td>
                             <td style="color:#6b7280">${escapeHtml(u.email)}</td>
@@ -9280,10 +9519,13 @@ async function loadSettingsUsers(content) {
                                 </select>
                             </td>
                             <td>
-                                <span class="settings-status-badge ${isActive ? 'settings-status-active' : 'settings-status-inactive'}">
-                                    <span class="settings-status-dot" style="background:${isActive ? '#059669' : '#ef4444'}"></span>
-                                    ${isActive ? 'Online' : 'Offline'}
+                                <span class="settings-status-badge ${statusClass}" style="${hasSignedIn ? '' : 'background:#fef3c7;color:#92400e'}">
+                                    <span class="settings-status-dot" style="background:${dotColor}"></span>
+                                    ${statusLabel}
                                 </span>
+                            </td>
+                            <td style="text-align:right">
+                                ${hasSignedIn ? '' : `<button class="settings-btn" style="font-size:12px;padding:6px 10px" onclick="resendInvite('${u.id}', '${escapeHtml(u.email)}')">Resend invite</button>`}
                             </td>
                         </tr>`;
                     }).join('')}
@@ -9292,6 +9534,139 @@ async function loadSettingsUsers(content) {
             ${users.length === 0 ? '<div class="settings-empty">No team members found.</div>' : ''}
         </div>
     `;
+}
+
+async function loadBulkInviteCsv() {
+    const fileInput = document.getElementById('bulkInviteCsv');
+    const textArea = document.getElementById('bulkInviteText');
+    if (!fileInput.files || !fileInput.files[0]) return;
+    const file = fileInput.files[0];
+    const text = await file.text();
+    // Strip header row if it contains "email" (case-insensitive)
+    const lines = text.split(/\r?\n/);
+    if (lines.length && /email/i.test(lines[0]) && !/@/.test(lines[0])) {
+        lines.shift();
+    }
+    const existing = textArea.value.trim();
+    textArea.value = existing ? existing + '\n' + lines.join('\n') : lines.join('\n');
+    settingsToast(`Loaded ${lines.filter(l => l.trim()).length} lines from ${file.name}`, 'success');
+}
+
+async function sendBulkInvites() {
+    const textArea = document.getElementById('bulkInviteText');
+    const roleSel = document.getElementById('bulkInviteRole');
+    const senderSel = document.getElementById('bulkInviteSender');
+    const sendEmailChk = document.getElementById('bulkInviteSendEmail');
+    const btn = document.getElementById('bulkInviteBtn');
+    const status = document.getElementById('bulkInviteStatus');
+    const resultBox = document.getElementById('bulkInviteResult');
+
+    const rawText = (textArea.value || '').trim();
+    if (!rawText) {
+        settingsToast('Please enter at least one email address', 'error');
+        textArea.style.borderColor = '#ef4444';
+        setTimeout(() => { textArea.style.borderColor = ''; }, 2000);
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+    status.textContent = '';
+    resultBox.style.display = 'none';
+
+    try {
+        const res = await fetch('/api/manager/employees/invite', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                raw_text: rawText,
+                default_role: roleSel.value,
+                sender_mailbox: senderSel.value || null,
+                send_email: sendEmailChk.checked
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Invite failed');
+
+        const s = data.summary;
+        let msg = `${s.created} created, ${s.updated} updated, ${s.already_exists} already on team`;
+        if (s.emails_sent > 0) msg += ` · ${s.emails_sent} emails sent`;
+        if (s.errors > 0) msg += ` · ${s.errors} errors`;
+        settingsToast(msg, s.errors > 0 ? 'error' : 'success');
+
+        // Render per-invite result table
+        resultBox.style.display = 'block';
+        resultBox.innerHTML = `
+            <div style="background:#f8fafc;border-radius:8px;padding:12px 14px;margin-top:8px;font-size:13px">
+                <div style="font-weight:600;margin-bottom:8px">Invitation results${data.sender_mailbox ? ` (sent from ${escapeHtml(data.sender_mailbox)})` : ''}</div>
+                <table style="width:100%;border-collapse:collapse">
+                    <thead>
+                        <tr style="color:#6b7280;font-size:12px;text-align:left">
+                            <th style="padding:6px 8px">Email</th>
+                            <th style="padding:6px 8px">Role</th>
+                            <th style="padding:6px 8px">Status</th>
+                            <th style="padding:6px 8px">Email</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.results.map(r => {
+                            const statusBadge = {
+                                created: `<span style="color:#059669;font-weight:600">Created</span>`,
+                                updated: `<span style="color:#2563eb;font-weight:600">Role updated</span>`,
+                                already_exists: `<span style="color:#6b7280">Already on team</span>`,
+                                error: `<span style="color:#dc2626;font-weight:600">Error: ${escapeHtml(r.error || '')}</span>`
+                            }[r.status] || r.status;
+                            const emailStatus = r.email_sent
+                                ? `<span style="color:#059669">Sent</span>`
+                                : r.email_error
+                                  ? `<span style="color:#dc2626" title="${escapeHtml(r.email_error)}">Failed</span>`
+                                  : `<span style="color:#9ca3af">Skipped</span>`;
+                            return `<tr style="border-top:1px solid #e5e7eb">
+                                <td style="padding:6px 8px">${escapeHtml(r.email)}</td>
+                                <td style="padding:6px 8px">${escapeHtml(r.role)}</td>
+                                <td style="padding:6px 8px">${statusBadge}</td>
+                                <td style="padding:6px 8px">${emailStatus}</td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        // Refresh user list after successful invite
+        if (s.created > 0 || s.updated > 0) {
+            setTimeout(() => {
+                const contentEl = document.getElementById('settingsTabContent');
+                if (contentEl) loadSettingsUsers(contentEl).catch(() => {});
+            }, 500);
+        }
+
+        textArea.value = '';
+    } catch (err) {
+        settingsToast('Failed to send invites: ' + err.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send Invitations';
+    }
+}
+
+async function resendInvite(userId, email) {
+    if (!confirm(`Resend invitation email to ${email}?`)) return;
+    const senderSel = document.getElementById('bulkInviteSender');
+    try {
+        const res = await fetch(`/api/manager/employees/${userId}/resend-invite`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sender_mailbox: senderSel ? senderSel.value : null })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Resend failed');
+        settingsToast(`Invite resent to ${email} from ${data.sender}`, 'success');
+    } catch (err) {
+        settingsToast('Failed to resend: ' + err.message, 'error');
+    }
 }
 
 async function changeUserRole(userId, newRole) {
@@ -9969,8 +10344,31 @@ async function loadSettingsAI(content) {
 
         <div class="settings-card" style="margin-top:16px;">
             <div class="settings-card-header">
+                <div class="settings-card-title">Report Viewer</div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <div id="reportViewerTabs" style="display:flex;gap:4px;background:#f3f4f6;border-radius:6px;padding:3px;">
+                        <button onclick="switchReportTab('daily')" id="reportTab_daily" data-rvtab="daily" style="padding:4px 12px;border:none;border-radius:4px;font-size:12px;cursor:pointer;background:#fff;color:#0f172a;font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,0.05);">Daily</button>
+                        <button onclick="switchReportTab('weekly')" id="reportTab_weekly" data-rvtab="weekly" style="padding:4px 12px;border:none;border-radius:4px;font-size:12px;cursor:pointer;background:transparent;color:#6b7280;font-weight:600;">Weekly</button>
+                        <button onclick="switchReportTab('monthly')" id="reportTab_monthly" data-rvtab="monthly" style="padding:4px 12px;border:none;border-radius:4px;font-size:12px;cursor:pointer;background:transparent;color:#6b7280;font-weight:600;">Monthly</button>
+                    </div>
+                    <button onclick="refreshReportViewer()" style="padding:6px 10px;background:#fff;color:#374151;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;" title="Reload the viewer">↻</button>
+                    <button onclick="openCurrentReportInNewTab()" style="padding:6px 10px;background:#fff;color:#374151;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;" title="Open in new tab">↗</button>
+                    <button onclick="toggleReportViewerFullscreen()" id="reportViewerFsBtn" style="padding:6px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;" title="Full screen">⛶</button>
+                </div>
+            </div>
+            <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
+                The exact report that gets emailed — rendered from the latest completed metrics run. Switch tabs to see each schedule.
+            </div>
+            <div id="reportViewerContainer" style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;background:#f1f5f9;">
+                <iframe id="reportViewerIframe" src="about:blank" style="display:block;width:100%;height:600px;border:none;background:#f1f5f9;"></iframe>
+            </div>
+        </div>
+
+        <div class="settings-card" style="margin-top:16px;">
+            <div class="settings-card-header">
                 <div class="settings-card-title">Daily Email Report</div>
                 <div style="display:flex;gap:8px;">
+                    <button onclick="openReportPreview('daily')" style="padding:6px 14px;background:#fff;color:#374151;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Preview</button>
                     <button onclick="sendDailyReportTest()" style="padding:6px 14px;background:#fff;color:#374151;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Send Test Now</button>
                     <button onclick="saveDailyReportConfig()" style="padding:6px 14px;background:#059669;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Save</button>
                 </div>
@@ -9979,6 +10377,171 @@ async function loadSettingsAI(content) {
                 Email a daily summary of the past 24h — response times, top customer questions, and flags — to the team.
             </div>
             <div id="dailyReportCard" style="font-size:13px;color:#6b7280;">Loading…</div>
+        </div>
+
+        <div class="settings-card" style="margin-top:16px;">
+            <div class="settings-card-header">
+                <div class="settings-card-title">Weekly Report</div>
+                <div style="display:flex;gap:8px;">
+                    <button onclick="openReportPreview('weekly')" style="padding:6px 14px;background:#fff;color:#374151;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Preview</button>
+                    <button onclick="sendPeriodicReportTest('weekly')" style="padding:6px 14px;background:#fff;color:#374151;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Send Test Now</button>
+                    <button onclick="savePeriodicReportConfig('weekly')" style="padding:6px 14px;background:#059669;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Save</button>
+                </div>
+            </div>
+            <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
+                Email a rollup of the past 7 days — chosen day of the week.
+            </div>
+            <div id="weeklyReportCard" style="font-size:13px;color:#6b7280;">Loading…</div>
+        </div>
+
+        <div class="settings-card" style="margin-top:16px;">
+            <div class="settings-card-header">
+                <div class="settings-card-title">Monthly Report</div>
+                <div style="display:flex;gap:8px;">
+                    <button onclick="openReportPreview('monthly')" style="padding:6px 14px;background:#fff;color:#374151;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Preview</button>
+                    <button onclick="sendPeriodicReportTest('monthly')" style="padding:6px 14px;background:#fff;color:#374151;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Send Test Now</button>
+                    <button onclick="savePeriodicReportConfig('monthly')" style="padding:6px 14px;background:#059669;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Save</button>
+                </div>
+            </div>
+            <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
+                Email a rollup of the past 30 days — chosen day of the month.
+            </div>
+            <div id="monthlyReportCard" style="font-size:13px;color:#6b7280;">Loading…</div>
+        </div>
+
+        <div class="settings-card" style="margin-top:16px;">
+            <div class="settings-card-header">
+                <div class="settings-card-title">Rep Roster</div>
+                <button onclick="openAddRepModal()" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">+ Add Rep</button>
+            </div>
+            <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
+                Map rep email addresses to friendly display names. Flag who receives real-time alerts.
+            </div>
+            <div id="repRosterCard" style="font-size:13px;color:#6b7280;">Loading…</div>
+        </div>
+
+        <div class="settings-card" style="margin-top:16px;">
+            <div class="settings-card-header">
+                <div class="settings-card-title">Real-time Alerts</div>
+                <button onclick="saveAlertsConfig()" style="padding:6px 14px;background:#059669;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Save</button>
+            </div>
+            <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
+                Immediately email flagged threads to the on-call list when a metrics run produces high-severity flags.
+            </div>
+            <div id="alertsConfigCard" style="font-size:13px;color:#6b7280;">Loading…</div>
+        </div>
+
+        <div class="settings-card" style="margin-top:16px;">
+            <div class="settings-card-header">
+                <div class="settings-card-title">Review Queue — Ingested KB</div>
+                <div style="display:flex;gap:8px;">
+                    <button onclick="toggleReviewGating()" id="btnToggleReviewGating" style="padding:6px 14px;background:#fff;color:#374151;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Loading…</button>
+                    <button onclick="refreshReviewQueue()" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Refresh</button>
+                </div>
+            </div>
+            <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
+                When gating is ON, newly-ingested Q/A pairs and facts start as <em>pending review</em> and do not reach the AI until approved.
+            </div>
+            <div id="reviewQueueCard" style="font-size:13px;color:#6b7280;">Loading…</div>
+        </div>
+
+        <div class="settings-card" style="margin-top:16px;">
+            <div class="settings-card-header">
+                <div class="settings-card-title">Knowledge Conflicts</div>
+                <button onclick="refreshConflicts()" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;">Refresh</button>
+            </div>
+            <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
+                When ingestion finds two different values for the same product/field (e.g. "$15.20" vs "$20"), pick which one to keep.
+            </div>
+            <div id="conflictsCard" style="font-size:13px;color:#6b7280;">Loading…</div>
+        </div>
+
+        <!-- Add/Edit Rep Modal -->
+        <div id="repModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:200;align-items:center;justify-content:center;">
+            <div style="background:#fff;border-radius:12px;padding:24px;max-width:520px;width:90%;max-height:80vh;overflow-y:auto;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                    <h3 style="margin:0;font-size:16px;" id="repModalTitle">Add Rep</h3>
+                    <button onclick="closeRepModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;">&times;</button>
+                </div>
+                <input type="hidden" id="repModalId" />
+                <div style="margin-bottom:10px;">
+                    <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Email</label>
+                    <input id="repModalEmail" type="email" style="width:100%;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;" placeholder="anna@sdsign.com" />
+                </div>
+                <div style="margin-bottom:10px;">
+                    <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Display name</label>
+                    <input id="repModalDisplayName" type="text" style="width:100%;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;" placeholder="Anna B." />
+                </div>
+                <div style="margin-bottom:10px;display:flex;gap:10px;">
+                    <div style="flex:1;">
+                        <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Role</label>
+                        <select id="repModalRole" style="width:100%;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">
+                            <option value="rep">Rep</option>
+                            <option value="manager">Manager</option>
+                            <option value="owner">Owner</option>
+                        </select>
+                    </div>
+                    <div style="flex:1;">
+                        <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">SLA override (hours)</label>
+                        <input id="repModalSla" type="number" min="0" step="0.5" style="width:100%;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;" placeholder="(default)" />
+                    </div>
+                </div>
+                <div style="margin-bottom:10px;display:flex;gap:14px;align-items:center;">
+                    <label style="font-size:13px;display:flex;gap:6px;align-items:center;cursor:pointer;">
+                        <input type="checkbox" id="repModalIsActive" checked /> Active
+                    </label>
+                    <label style="font-size:13px;display:flex;gap:6px;align-items:center;cursor:pointer;">
+                        <input type="checkbox" id="repModalReceivesAlerts" /> Receives real-time alerts
+                    </label>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Notes</label>
+                    <textarea id="repModalNotes" rows="2" style="width:100%;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;" placeholder="(optional)"></textarea>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <button onclick="closeRepModal()" style="padding:8px 14px;background:#fff;color:#374151;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;cursor:pointer;">Cancel</button>
+                    <button onclick="saveRepModal()" style="padding:8px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:600;">Save</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Review Item Modal -->
+        <div id="reviewEditModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:200;align-items:center;justify-content:center;">
+            <div style="background:#fff;border-radius:12px;padding:24px;max-width:640px;width:92%;max-height:85vh;overflow-y:auto;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                    <h3 style="margin:0;font-size:16px;" id="reviewEditTitle">Edit pending item</h3>
+                    <button onclick="closeReviewEditModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;">&times;</button>
+                </div>
+                <input type="hidden" id="reviewEditId" />
+                <input type="hidden" id="reviewEditKind" />
+                <div id="reviewEditBody"></div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+                    <button onclick="closeReviewEditModal()" style="padding:8px 14px;background:#fff;color:#374151;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;cursor:pointer;">Cancel</button>
+                    <button onclick="submitReviewEdit()" style="padding:8px 14px;background:#059669;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:600;">Save & Approve</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resolve Conflict Modal -->
+        <div id="conflictModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:200;align-items:center;justify-content:center;">
+            <div style="background:#fff;border-radius:12px;padding:24px;max-width:560px;width:92%;max-height:85vh;overflow-y:auto;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                    <h3 style="margin:0;font-size:16px;">Resolve conflict</h3>
+                    <button onclick="closeConflictModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;">&times;</button>
+                </div>
+                <input type="hidden" id="conflictModalId" />
+                <div id="conflictModalBody" style="font-size:13px;color:#374151;"></div>
+                <div style="margin-top:12px;">
+                    <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Custom value (only used for "Use custom")</label>
+                    <input id="conflictCustomValue" type="text" style="width:100%;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;" placeholder="Type the correct value if keeping custom" />
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:14px;">
+                    <button onclick="submitConflictResolution('keep_old')" style="padding:8px 14px;background:#fff;color:#374151;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;cursor:pointer;">Keep old</button>
+                    <button onclick="submitConflictResolution('keep_new')" style="padding:8px 14px;background:#fff;color:#374151;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;cursor:pointer;">Keep new</button>
+                    <button onclick="submitConflictResolution('custom')" style="padding:8px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:600;">Use custom</button>
+                    <button onclick="submitConflictResolution('dismissed')" style="padding:8px 14px;background:#fff;color:#6b7280;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;cursor:pointer;">Dismiss</button>
+                </div>
+            </div>
         </div>
 
         <div class="settings-card" style="margin-top:16px;">
@@ -10123,6 +10686,13 @@ async function loadSettingsAI(content) {
     try { refreshIngestionStatus(); } catch (e) {}
     try { refreshMetricsStatus(); } catch (e) {}
     try { refreshDailyReportCard(); } catch (e) {}
+    try { refreshPeriodicReportCard('weekly'); } catch (e) {}
+    try { refreshPeriodicReportCard('monthly'); } catch (e) {}
+    try { refreshRepRoster(); } catch (e) {}
+    try { refreshAlertsConfig(); } catch (e) {}
+    try { refreshReviewQueue(); } catch (e) {}
+    try { refreshConflicts(); } catch (e) {}
+    try { initReportViewer(); } catch (e) {}
 }
 
 // ===== Training Mailbox Ingestion UI =====
@@ -10423,7 +10993,10 @@ async function renderMetricsResults(runId) {
 
         const repRows = repStats.slice(0, 10).map(r =>
             '<tr>' +
-                '<td style="padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12px;">' + escapeHtml(r.rep_email || '—') + '</td>' +
+                '<td style="padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12px;">' +
+                    escapeHtml(r.display_name || r.rep_email || '—') +
+                    (r.display_name && r.display_name !== r.rep_email ? '<div style="font-size:10px;color:#94a3b8;">' + escapeHtml(r.rep_email) + '</div>' : '') +
+                '</td>' +
                 '<td style="padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12px;text-align:right;">' + r.threads_first_responder + '</td>' +
                 '<td style="padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12px;text-align:right;">' + _msToHuman(r.first_response_ms_avg) + '</td>' +
                 '<td style="padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12px;text-align:right;">' + _msToHuman(r.first_response_ms_median) + '</td>' +
@@ -10635,7 +11208,8 @@ async function refreshDailyReportCard() {
     }
 }
 
-async function saveDailyReportConfig() {
+async function saveDailyReportConfig(opts) {
+    const silent = opts && opts.silent;
     const payload = {
         enabled: document.getElementById('dr_enabled').checked,
         recipients: _parseList(document.getElementById('dr_recipients').value),
@@ -10655,15 +11229,32 @@ async function saveDailyReportConfig() {
             body: JSON.stringify(payload)
         });
         if (!res.ok) throw new Error('save failed');
-        settingsToast('Daily report config saved', 'success');
-        refreshDailyReportCard();
-    } catch (e) { settingsToast('Save failed: ' + e.message, 'error'); }
+        if (!silent) {
+            settingsToast('Daily report config saved', 'success');
+            refreshDailyReportCard();
+        }
+        return payload;
+    } catch (e) {
+        if (!silent) settingsToast('Save failed: ' + e.message, 'error');
+        throw e;
+    }
 }
 
 async function sendDailyReportTest() {
-    if (!confirm('Run the analysis now and email the report to the configured recipients? This may take a minute or two.')) return;
-    settingsToast('Sending test report — this may take a minute…', 'info');
+    // Client-side pre-flight: make sure recipients field isn't empty.
+    const recipientsStr = (document.getElementById('dr_recipients')?.value || '').trim();
+    const recipients = _parseList(recipientsStr);
+    if (!recipients.length) {
+        settingsToast('Add at least one recipient email first, then click Send Test.', 'error');
+        const input = document.getElementById('dr_recipients');
+        if (input) { input.focus(); input.style.borderColor = '#dc2626'; setTimeout(() => { input.style.borderColor = ''; }, 2000); }
+        return;
+    }
+    if (!confirm('Send a test daily report to: ' + recipients.join(', ') + '?\n\nThis saves your current config first, then runs a fresh analysis. May take a minute or two.')) return;
+    settingsToast('Saving config and sending test — this may take a minute…', 'info');
     try {
+        // Auto-save current form state first so the test uses what's on screen
+        await saveDailyReportConfig({ silent: true });
         const res = await fetch('/api/ai/metrics/report/send-test', {
             method: 'POST', credentials: 'include',
         });
@@ -10672,6 +11263,594 @@ async function sendDailyReportTest() {
         settingsToast('Sent to: ' + (data.sent || []).join(', '), 'success');
         refreshDailyReportCard();
     } catch (e) { settingsToast('Test send failed: ' + e.message, 'error'); }
+}
+
+// Opens the rendered report HTML in a new tab. The endpoint uses the latest
+// completed metrics run so this is near-instant.
+function openReportPreview(kind) {
+    window.open('/api/ai/metrics/report/' + encodeURIComponent(kind) + '/preview', '_blank');
+}
+
+// ===== In-app Report Viewer =====
+let _reportViewerKind = 'daily';
+
+function initReportViewer() {
+    _reportViewerKind = 'daily';
+    switchReportTab('daily');
+}
+
+function switchReportTab(kind) {
+    _reportViewerKind = kind;
+    // Update tab styles
+    ['daily', 'weekly', 'monthly'].forEach(k => {
+        const btn = document.getElementById('reportTab_' + k);
+        if (!btn) return;
+        if (k === kind) {
+            btn.style.background = '#fff';
+            btn.style.color = '#0f172a';
+            btn.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)';
+        } else {
+            btn.style.background = 'transparent';
+            btn.style.color = '#6b7280';
+            btn.style.boxShadow = 'none';
+        }
+    });
+    refreshReportViewer();
+}
+
+function refreshReportViewer() {
+    const iframe = document.getElementById('reportViewerIframe');
+    if (!iframe) return;
+    // Cache-bust so the latest run always shows
+    const url = '/api/ai/metrics/report/' + encodeURIComponent(_reportViewerKind) + '/preview?t=' + Date.now();
+    iframe.src = url;
+}
+
+function openCurrentReportInNewTab() {
+    window.open('/api/ai/metrics/report/' + encodeURIComponent(_reportViewerKind) + '/preview', '_blank');
+}
+
+function toggleReportViewerFullscreen() {
+    const container = document.getElementById('reportViewerContainer');
+    const iframe = document.getElementById('reportViewerIframe');
+    const btn = document.getElementById('reportViewerFsBtn');
+    if (!container || !iframe) return;
+    const isFs = container.dataset.fullscreen === '1';
+    if (!isFs) {
+        container.dataset.fullscreen = '1';
+        container.style.position = 'fixed';
+        container.style.top = '0';
+        container.style.left = '0';
+        container.style.right = '0';
+        container.style.bottom = '0';
+        container.style.width = '100%';
+        container.style.height = '100vh';
+        container.style.zIndex = '300';
+        container.style.borderRadius = '0';
+        iframe.style.height = '100vh';
+        if (btn) { btn.textContent = '✕'; btn.title = 'Exit full screen'; }
+    } else {
+        container.dataset.fullscreen = '0';
+        container.style.position = '';
+        container.style.top = '';
+        container.style.left = '';
+        container.style.right = '';
+        container.style.bottom = '';
+        container.style.width = '';
+        container.style.height = '';
+        container.style.zIndex = '';
+        container.style.borderRadius = '10px';
+        iframe.style.height = '600px';
+        if (btn) { btn.textContent = '⛶'; btn.title = 'Full screen'; }
+    }
+}
+
+// ===== Weekly + Monthly Report UI =====
+async function refreshPeriodicReportCard(kind) {
+    const el = document.getElementById(kind + 'ReportCard');
+    if (!el) return;
+    try {
+        const res = await fetch('/api/ai/metrics/report/' + kind + '/config', { credentials: 'include' });
+        const cfg = await res.json();
+        const last = cfg._last;
+        const lastLine = last
+            ? '<div style="font-size:11px;color:#94a3b8;margin-top:8px;">Last sent: ' + new Date(last.sent_at).toLocaleString() + ' to ' + (last.sent_to || []).join(', ') + '</div>'
+            : '<div style="font-size:11px;color:#94a3b8;margin-top:8px;">Never sent.</div>';
+        const dowSelect = kind === 'weekly'
+            ? `<div style="flex:1;"><label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px;">Day of week</label>
+                <select id="${kind}Dow" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">
+                    ${[{v:0,n:'Sun'},{v:1,n:'Mon'},{v:2,n:'Tue'},{v:3,n:'Wed'},{v:4,n:'Thu'},{v:5,n:'Fri'},{v:6,n:'Sat'}].map(d => `<option value="${d.v}" ${cfg.day_of_week === d.v ? 'selected' : ''}>${d.n}</option>`).join('')}
+                </select></div>`
+            : `<div style="flex:1;"><label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px;">Day of month</label>
+                <input id="${kind}Dom" type="number" min="1" max="28" value="${cfg.day_of_month || 1}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;" /></div>`;
+        el.innerHTML = `
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                <label style="font-size:13px;display:flex;gap:6px;align-items:center;cursor:pointer;">
+                    <input type="checkbox" id="${kind}Enabled" ${cfg.enabled ? 'checked' : ''} /> Enabled
+                </label>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
+                ${dowSelect}
+                <div style="flex:1;">
+                    <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px;">Send time</label>
+                    <input id="${kind}Time" type="time" value="${escapeHtml(cfg.send_time || '08:00')}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;" />
+                </div>
+                <div style="flex:1;">
+                    <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px;">Timezone</label>
+                    <input id="${kind}Tz" type="text" value="${escapeHtml(cfg.timezone || 'America/Los_Angeles')}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;" />
+                </div>
+            </div>
+            <div style="margin-top:8px;">
+                <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px;">Recipients (comma-separated)</label>
+                <input id="${kind}Recipients" type="text" value="${escapeHtml((cfg.recipients || []).join(', '))}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;" placeholder="manager@sdsign.com, owner@sdsign.com" />
+            </div>
+            <div style="display:flex;gap:10px;margin-top:8px;">
+                <div style="flex:1;">
+                    <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px;">From mailbox</label>
+                    <input id="${kind}FromMailbox" type="text" value="${escapeHtml(cfg.send_from_mailbox || 'info@sdsign.com')}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;" />
+                </div>
+                <div style="flex:1;">
+                    <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px;">Top N categories</label>
+                    <input id="${kind}TopN" type="number" min="1" max="50" value="${cfg.top_n_categories || (kind === 'weekly' ? 10 : 15)}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;" />
+                </div>
+            </div>
+            ${lastLine}
+        `;
+    } catch (e) { el.innerHTML = '<span style="color:#ef4444;">Failed to load</span>'; }
+}
+
+async function savePeriodicReportConfig(kind, opts) {
+    const silent = opts && opts.silent;
+    const payload = {
+        enabled: document.getElementById(kind + 'Enabled').checked,
+        send_time: document.getElementById(kind + 'Time').value || '08:00',
+        timezone: document.getElementById(kind + 'Tz').value.trim() || 'America/Los_Angeles',
+        recipients: (document.getElementById(kind + 'Recipients').value || '')
+            .split(',').map(s => s.trim()).filter(Boolean),
+        send_from_mailbox: document.getElementById(kind + 'FromMailbox').value.trim(),
+        top_n_categories: parseInt(document.getElementById(kind + 'TopN').value) || 10,
+    };
+    if (kind === 'weekly') payload.day_of_week = parseInt(document.getElementById('weeklyDow').value);
+    else payload.day_of_month = parseInt(document.getElementById('monthlyDom').value) || 1;
+    try {
+        const res = await fetch('/api/ai/metrics/report/' + kind + '/config', {
+            method: 'PUT', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'save failed'); }
+        if (!silent) {
+            settingsToast(kind[0].toUpperCase() + kind.slice(1) + ' report saved', 'success');
+            refreshPeriodicReportCard(kind);
+        }
+        return payload;
+    } catch (e) {
+        if (!silent) settingsToast('Save failed: ' + e.message, 'error');
+        throw e;
+    }
+}
+
+async function sendPeriodicReportTest(kind) {
+    const recipients = (document.getElementById(kind + 'Recipients')?.value || '')
+        .split(',').map(s => s.trim()).filter(Boolean);
+    if (!recipients.length) {
+        settingsToast('Add at least one recipient email first, then click Send Test.', 'error');
+        const input = document.getElementById(kind + 'Recipients');
+        if (input) { input.focus(); input.style.borderColor = '#dc2626'; setTimeout(() => { input.style.borderColor = ''; }, 2000); }
+        return;
+    }
+    if (!confirm('Send a test ' + kind + ' report to: ' + recipients.join(', ') + '?\n\nThis saves your current config first, then runs a fresh analysis. May take a few minutes.')) return;
+    settingsToast('Saving config and sending test ' + kind + ' report — this may take a few minutes…', 'info');
+    try {
+        await savePeriodicReportConfig(kind, { silent: true });
+        const res = await fetch('/api/ai/metrics/report/' + kind + '/send-test', {
+            method: 'POST', credentials: 'include',
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'send failed');
+        settingsToast('Sent to: ' + (data.sent || []).join(', '), 'success');
+        refreshPeriodicReportCard(kind);
+    } catch (e) { settingsToast('Test send failed: ' + e.message, 'error'); }
+}
+
+// ===== Rep Roster UI =====
+async function refreshRepRoster() {
+    const el = document.getElementById('repRosterCard');
+    if (!el) return;
+    try {
+        const res = await fetch('/api/ai/reps', { credentials: 'include' });
+        const reps = await res.json();
+        if (!reps.length) {
+            el.innerHTML = '<div style="color:#9ca3af;padding:8px 0;">No reps yet. Click <b>+ Add Rep</b> to start.</div>';
+            return;
+        }
+        el.innerHTML = `
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead>
+                    <tr style="background:#f8fafc;">
+                        <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;">Name</th>
+                        <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;">Email</th>
+                        <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;">Role</th>
+                        <th style="padding:8px 10px;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;">SLA</th>
+                        <th style="padding:8px 10px;text-align:center;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;">Alerts</th>
+                        <th style="padding:8px 10px;text-align:center;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;">Active</th>
+                        <th style="padding:8px 10px;"></th>
+                    </tr>
+                </thead>
+                <tbody>${reps.map(r => `
+                    <tr>
+                        <td style="padding:8px 10px;border-top:1px solid #f1f5f9;font-weight:600;color:#0f172a;">${escapeHtml(r.display_name || r.email)}</td>
+                        <td style="padding:8px 10px;border-top:1px solid #f1f5f9;color:#64748b;">${escapeHtml(r.email)}</td>
+                        <td style="padding:8px 10px;border-top:1px solid #f1f5f9;color:#64748b;">${escapeHtml(r.role || 'rep')}</td>
+                        <td style="padding:8px 10px;border-top:1px solid #f1f5f9;text-align:right;color:#64748b;">${r.sla_hours_override == null ? '—' : r.sla_hours_override + 'h'}</td>
+                        <td style="padding:8px 10px;border-top:1px solid #f1f5f9;text-align:center;">${r.receives_alerts ? '✓' : '—'}</td>
+                        <td style="padding:8px 10px;border-top:1px solid #f1f5f9;text-align:center;">${r.is_active ? '✓' : '—'}</td>
+                        <td style="padding:8px 10px;border-top:1px solid #f1f5f9;text-align:right;">
+                            <button onclick='openEditRepModal(${JSON.stringify(r).replace(/'/g, "&apos;")})' style="padding:4px 8px;border:1px solid #e5e7eb;border-radius:4px;font-size:11px;cursor:pointer;background:#fff;">Edit</button>
+                            <button onclick="deleteRep('${r.id}')" style="padding:4px 8px;border:1px solid #fecaca;border-radius:4px;font-size:11px;cursor:pointer;background:#fef2f2;color:#dc2626;">Del</button>
+                        </td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>`;
+    } catch (e) { el.innerHTML = '<span style="color:#ef4444;">Failed to load reps</span>'; }
+}
+
+function openAddRepModal() {
+    document.getElementById('repModalTitle').textContent = 'Add Rep';
+    document.getElementById('repModalId').value = '';
+    document.getElementById('repModalEmail').value = '';
+    document.getElementById('repModalEmail').disabled = false;
+    document.getElementById('repModalDisplayName').value = '';
+    document.getElementById('repModalRole').value = 'rep';
+    document.getElementById('repModalSla').value = '';
+    document.getElementById('repModalIsActive').checked = true;
+    document.getElementById('repModalReceivesAlerts').checked = false;
+    document.getElementById('repModalNotes').value = '';
+    document.getElementById('repModal').style.display = 'flex';
+}
+
+function openEditRepModal(rep) {
+    document.getElementById('repModalTitle').textContent = 'Edit Rep';
+    document.getElementById('repModalId').value = rep.id || '';
+    document.getElementById('repModalEmail').value = rep.email || '';
+    document.getElementById('repModalEmail').disabled = true;
+    document.getElementById('repModalDisplayName').value = rep.display_name || '';
+    document.getElementById('repModalRole').value = rep.role || 'rep';
+    document.getElementById('repModalSla').value = rep.sla_hours_override == null ? '' : rep.sla_hours_override;
+    document.getElementById('repModalIsActive').checked = rep.is_active !== false;
+    document.getElementById('repModalReceivesAlerts').checked = !!rep.receives_alerts;
+    document.getElementById('repModalNotes').value = rep.notes || '';
+    document.getElementById('repModal').style.display = 'flex';
+}
+
+function closeRepModal() {
+    document.getElementById('repModal').style.display = 'none';
+}
+
+async function saveRepModal() {
+    const payload = {
+        email: document.getElementById('repModalEmail').value.trim(),
+        display_name: document.getElementById('repModalDisplayName').value.trim(),
+        role: document.getElementById('repModalRole').value,
+        sla_hours_override: document.getElementById('repModalSla').value || null,
+        is_active: document.getElementById('repModalIsActive').checked,
+        receives_alerts: document.getElementById('repModalReceivesAlerts').checked,
+        notes: document.getElementById('repModalNotes').value.trim(),
+    };
+    if (!payload.email) { settingsToast('Email required', 'error'); return; }
+    try {
+        const res = await fetch('/api/ai/reps', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'save failed'); }
+        settingsToast('Rep saved', 'success');
+        closeRepModal();
+        refreshRepRoster();
+    } catch (e) { settingsToast('Save failed: ' + e.message, 'error'); }
+}
+
+async function deleteRep(id) {
+    if (!confirm('Remove this rep from the roster? (Does not affect past metrics.)')) return;
+    try {
+        const res = await fetch('/api/ai/reps/' + id, { method: 'DELETE', credentials: 'include' });
+        if (!res.ok) throw new Error('delete failed');
+        settingsToast('Rep removed', 'success');
+        refreshRepRoster();
+    } catch (e) { settingsToast('Delete failed: ' + e.message, 'error'); }
+}
+
+// ===== Real-time Alerts UI =====
+async function refreshAlertsConfig() {
+    const el = document.getElementById('alertsConfigCard');
+    if (!el) return;
+    try {
+        const res = await fetch('/api/ai/alerts/config', { credentials: 'include' });
+        const cfg = await res.json();
+        const flagTypes = ['slow_first_response', 'unanswered', 'negative_sentiment', 'repeat_problem'];
+        const severities = ['low', 'medium', 'high'];
+        el.innerHTML = `
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+                <label style="font-size:13px;display:flex;gap:6px;align-items:center;cursor:pointer;">
+                    <input type="checkbox" id="alertsEnabled" ${cfg.enabled ? 'checked' : ''} /> Enabled
+                </label>
+                <label style="font-size:13px;display:flex;gap:6px;align-items:center;cursor:pointer;">
+                    <input type="checkbox" id="alertsUseRepRoster" ${cfg.use_rep_roster_alert_list !== false ? 'checked' : ''} /> Use rep roster alert list
+                </label>
+            </div>
+            <div style="margin-bottom:10px;">
+                <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:4px;">Severities to alert on</label>
+                <div style="display:flex;gap:10px;">${severities.map(s => `
+                    <label style="font-size:13px;display:flex;gap:4px;align-items:center;cursor:pointer;">
+                        <input type="checkbox" class="alertSeverity" value="${s}" ${(cfg.severities || ['high']).includes(s) ? 'checked' : ''} /> ${s}
+                    </label>`).join('')}
+                </div>
+            </div>
+            <div style="margin-bottom:10px;">
+                <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:4px;">Flag types</label>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">${flagTypes.map(t => `
+                    <label style="font-size:13px;display:flex;gap:4px;align-items:center;cursor:pointer;">
+                        <input type="checkbox" class="alertFlagType" value="${t}" ${(cfg.flag_types || flagTypes).includes(t) ? 'checked' : ''} /> ${t.replace(/_/g, ' ')}
+                    </label>`).join('')}
+                </div>
+            </div>
+            <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+                <div style="flex:2;">
+                    <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px;">Extra recipients (comma-separated)</label>
+                    <input id="alertsExtraRecipients" type="text" value="${escapeHtml((cfg.extra_recipients || []).join(', '))}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;" placeholder="oncall@sdsign.com" />
+                </div>
+                <div style="flex:1;">
+                    <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px;">Cooldown (min)</label>
+                    <input id="alertsCooldown" type="number" min="0" value="${cfg.cooldown_minutes || 30}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;" />
+                </div>
+                <div style="flex:1;">
+                    <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px;">From mailbox</label>
+                    <input id="alertsFromMailbox" type="text" value="${escapeHtml(cfg.send_from_mailbox || 'info@sdsign.com')}" style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;" />
+                </div>
+            </div>
+            <div id="alertsRecentLog" style="margin-top:12px;font-size:12px;color:#6b7280;">Loading recent alerts…</div>
+        `;
+        try {
+            const logRes = await fetch('/api/ai/alerts/recent?limit=10', { credentials: 'include' });
+            const log = await logRes.json();
+            const logEl = document.getElementById('alertsRecentLog');
+            if (!log.length) {
+                logEl.innerHTML = '<div style="color:#9ca3af;">No alerts sent yet.</div>';
+            } else {
+                logEl.innerHTML = '<div style="font-weight:600;color:#374151;margin-bottom:4px;">Recent alerts</div>' +
+                    log.map(l => `<div style="padding:4px 0;border-top:1px solid #f1f5f9;">
+                        <span style="color:${l.severity === 'high' ? '#b91c1c' : '#b45309'};font-weight:600;">${escapeHtml(l.severity)}</span>
+                        · ${escapeHtml((l.flag_type || '').replace(/_/g, ' '))}
+                        · <span style="color:#94a3b8;">${new Date(l.sent_at).toLocaleString()}</span>
+                        ${l.send_error ? '<span style="color:#dc2626;margin-left:6px;">error</span>' : ''}
+                    </div>`).join('');
+            }
+        } catch (e) { /* ignore */ }
+    } catch (e) { el.innerHTML = '<span style="color:#ef4444;">Failed to load alerts config</span>'; }
+}
+
+async function saveAlertsConfig() {
+    const payload = {
+        enabled: document.getElementById('alertsEnabled').checked,
+        use_rep_roster_alert_list: document.getElementById('alertsUseRepRoster').checked,
+        severities: Array.from(document.querySelectorAll('.alertSeverity:checked')).map(el => el.value),
+        flag_types: Array.from(document.querySelectorAll('.alertFlagType:checked')).map(el => el.value),
+        extra_recipients: (document.getElementById('alertsExtraRecipients').value || '')
+            .split(',').map(s => s.trim()).filter(Boolean),
+        cooldown_minutes: parseInt(document.getElementById('alertsCooldown').value) || 0,
+        send_from_mailbox: document.getElementById('alertsFromMailbox').value.trim(),
+    };
+    try {
+        const res = await fetch('/api/ai/alerts/config', {
+            method: 'PUT', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'save failed'); }
+        settingsToast('Alerts config saved', 'success');
+        refreshAlertsConfig();
+    } catch (e) { settingsToast('Save failed: ' + e.message, 'error'); }
+}
+
+// ===== Review Queue UI =====
+let _reviewGating = false;
+
+async function refreshReviewQueue() {
+    const el = document.getElementById('reviewQueueCard');
+    if (!el) return;
+    try {
+        const cfgRes = await fetch('/api/ai/review/config', { credentials: 'include' });
+        const cfg = await cfgRes.json();
+        _reviewGating = cfg.require_review_for_ingestion !== false;
+        const btn = document.getElementById('btnToggleReviewGating');
+        if (btn) {
+            btn.textContent = _reviewGating ? 'Gating: ON' : 'Gating: OFF';
+            btn.style.background = _reviewGating ? '#dcfce7' : '#fff';
+            btn.style.color = _reviewGating ? '#065f46' : '#374151';
+        }
+        const [qaRes, factsRes] = await Promise.all([
+            fetch('/api/ai/review/qa?limit=100', { credentials: 'include' }),
+            fetch('/api/ai/review/facts?limit=100', { credentials: 'include' }),
+        ]);
+        const qa = await qaRes.json();
+        const facts = await factsRes.json();
+        const qaRows = qa.length ? qa.map(r => `
+            <div style="padding:10px 0;border-bottom:1px solid #f1f5f9;">
+                <div style="font-size:12px;color:#64748b;margin-bottom:2px;">Q&A · ${escapeHtml(r.email_category || '—')} · ${new Date(r.created_at).toLocaleString()}</div>
+                <div style="font-size:13px;color:#0f172a;font-weight:600;">${escapeHtml((r.example_email || r.content || '').substring(0, 160))}${(r.example_email || r.content || '').length > 160 ? '…' : ''}</div>
+                ${r.example_response ? `<div style="font-size:12px;color:#475569;margin-top:4px;padding-left:10px;border-left:2px solid #e2e8f0;">${escapeHtml(r.example_response.substring(0, 240))}${r.example_response.length > 240 ? '…' : ''}</div>` : ''}
+                <div style="margin-top:6px;display:flex;gap:6px;">
+                    <button onclick="decideReview('qa', '${r.id}', 'approved')" style="padding:4px 10px;border:none;border-radius:4px;font-size:11px;cursor:pointer;background:#dcfce7;color:#065f46;font-weight:600;">Approve</button>
+                    <button onclick="openReviewEdit('qa', '${r.id}', ${JSON.stringify(r).replace(/"/g, '&quot;')})" style="padding:4px 10px;border:1px solid #e5e7eb;border-radius:4px;font-size:11px;cursor:pointer;background:#fff;">Edit</button>
+                    <button onclick="decideReview('qa', '${r.id}', 'rejected')" style="padding:4px 10px;border:1px solid #fecaca;border-radius:4px;font-size:11px;cursor:pointer;background:#fef2f2;color:#dc2626;">Reject</button>
+                </div>
+            </div>`).join('') : '<div style="color:#9ca3af;padding:8px 0;">No pending Q&A.</div>';
+        const factRows = facts.length ? facts.map(r => `
+            <div style="padding:10px 0;border-bottom:1px solid #f1f5f9;">
+                <div style="font-size:12px;color:#64748b;margin-bottom:2px;">Fact · ${escapeHtml(r.category || '—')} · ${new Date(r.created_at).toLocaleString()}</div>
+                <div style="font-size:13px;color:#0f172a;font-weight:600;">${escapeHtml(r.title || '')}</div>
+                <div style="font-size:12px;color:#475569;margin-top:2px;">${escapeHtml((r.content || '').substring(0, 240))}${(r.content || '').length > 240 ? '…' : ''}</div>
+                <div style="margin-top:6px;display:flex;gap:6px;">
+                    <button onclick="decideReview('facts', '${r.id}', 'approved')" style="padding:4px 10px;border:none;border-radius:4px;font-size:11px;cursor:pointer;background:#dcfce7;color:#065f46;font-weight:600;">Approve</button>
+                    <button onclick="openReviewEdit('facts', '${r.id}', ${JSON.stringify(r).replace(/"/g, '&quot;')})" style="padding:4px 10px;border:1px solid #e5e7eb;border-radius:4px;font-size:11px;cursor:pointer;background:#fff;">Edit</button>
+                    <button onclick="decideReview('facts', '${r.id}', 'rejected')" style="padding:4px 10px;border:1px solid #fecaca;border-radius:4px;font-size:11px;cursor:pointer;background:#fef2f2;color:#dc2626;">Reject</button>
+                </div>
+            </div>`).join('') : '<div style="color:#9ca3af;padding:8px 0;">No pending facts.</div>';
+        el.innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                <div>
+                    <div style="font-weight:600;color:#0f172a;margin-bottom:4px;">Pending Q&A pairs (${qa.length})</div>
+                    ${qaRows}
+                </div>
+                <div>
+                    <div style="font-weight:600;color:#0f172a;margin-bottom:4px;">Pending facts (${facts.length})</div>
+                    ${factRows}
+                </div>
+            </div>`;
+    } catch (e) { el.innerHTML = '<span style="color:#ef4444;">Failed to load review queue</span>'; }
+}
+
+async function toggleReviewGating() {
+    try {
+        const res = await fetch('/api/ai/review/config', {
+            method: 'PUT', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ require_review_for_ingestion: !_reviewGating }),
+        });
+        if (!res.ok) throw new Error('save failed');
+        settingsToast('Review gating ' + (!_reviewGating ? 'enabled' : 'disabled'), 'success');
+        refreshReviewQueue();
+    } catch (e) { settingsToast('Toggle failed: ' + e.message, 'error'); }
+}
+
+async function decideReview(kind, id, decision) {
+    if (decision === 'rejected' && !confirm('Reject this item? It will stay in the DB but will not reach the AI.')) return;
+    try {
+        const res = await fetch('/api/ai/review/' + kind + '/' + id + '/decide', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decision }),
+        });
+        if (!res.ok) throw new Error('decide failed');
+        settingsToast('Decided: ' + decision, 'success');
+        refreshReviewQueue();
+    } catch (e) { settingsToast('Decide failed: ' + e.message, 'error'); }
+}
+
+function openReviewEdit(kind, id, row) {
+    document.getElementById('reviewEditTitle').textContent = 'Edit pending ' + (kind === 'qa' ? 'Q&A' : 'fact');
+    document.getElementById('reviewEditId').value = id;
+    document.getElementById('reviewEditKind').value = kind;
+    const body = document.getElementById('reviewEditBody');
+    if (kind === 'qa') {
+        body.innerHTML = `
+            <div style="margin-bottom:10px;">
+                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Customer email (example)</label>
+                <textarea id="reviewEditField1" rows="3" style="width:100%;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">${escapeHtml(row.example_email || '')}</textarea>
+            </div>
+            <div style="margin-bottom:10px;">
+                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Ideal response</label>
+                <textarea id="reviewEditField2" rows="5" style="width:100%;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">${escapeHtml(row.example_response || '')}</textarea>
+            </div>`;
+    } else {
+        body.innerHTML = `
+            <div style="margin-bottom:10px;">
+                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Title</label>
+                <input id="reviewEditField1" type="text" value="${escapeHtml(row.title || '')}" style="width:100%;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;" />
+            </div>
+            <div style="margin-bottom:10px;">
+                <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Content</label>
+                <textarea id="reviewEditField2" rows="6" style="width:100%;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:13px;">${escapeHtml(row.content || '')}</textarea>
+            </div>`;
+    }
+    document.getElementById('reviewEditModal').style.display = 'flex';
+}
+
+function closeReviewEditModal() {
+    document.getElementById('reviewEditModal').style.display = 'none';
+}
+
+async function submitReviewEdit() {
+    const id = document.getElementById('reviewEditId').value;
+    const kind = document.getElementById('reviewEditKind').value;
+    const f1 = document.getElementById('reviewEditField1').value;
+    const f2 = document.getElementById('reviewEditField2').value;
+    const edit = kind === 'qa'
+        ? { example_email: f1, example_response: f2 }
+        : { title: f1, content: f2 };
+    try {
+        const res = await fetch('/api/ai/review/' + kind + '/' + id + '/decide', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decision: 'edited', edit }),
+        });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'save failed'); }
+        settingsToast('Edited and approved', 'success');
+        closeReviewEditModal();
+        refreshReviewQueue();
+    } catch (e) { settingsToast('Save failed: ' + e.message, 'error'); }
+}
+
+// ===== Conflicts UI =====
+async function refreshConflicts() {
+    const el = document.getElementById('conflictsCard');
+    if (!el) return;
+    try {
+        const res = await fetch('/api/ai/conflicts?status=pending&limit=50', { credentials: 'include' });
+        const rows = await res.json();
+        if (!rows.length) {
+            el.innerHTML = '<div style="color:#9ca3af;padding:8px 0;">No pending conflicts.</div>';
+            return;
+        }
+        el.innerHTML = rows.map(c => `
+            <div style="padding:10px 0;border-bottom:1px solid #f1f5f9;">
+                <div style="font-size:12px;color:#64748b;">${escapeHtml(c.product || '—')} · <b>${escapeHtml(c.field || '')}</b></div>
+                <div style="display:flex;gap:14px;margin-top:4px;font-size:13px;">
+                    <div style="flex:1;"><span style="color:#64748b;">Old:</span> <span style="color:#0f172a;font-weight:600;">${escapeHtml(c.old_value || '')}</span></div>
+                    <div style="flex:1;"><span style="color:#64748b;">New:</span> <span style="color:#0f172a;font-weight:600;">${escapeHtml(c.new_value || '')}</span></div>
+                </div>
+                <div style="margin-top:6px;">
+                    <button onclick='openConflictModal(${JSON.stringify(c).replace(/'/g, "&apos;")})' style="padding:4px 10px;border:1px solid #2563eb;border-radius:4px;font-size:11px;cursor:pointer;background:#2563eb;color:#fff;font-weight:600;">Resolve…</button>
+                </div>
+            </div>`).join('');
+    } catch (e) { el.innerHTML = '<span style="color:#ef4444;">Failed to load conflicts</span>'; }
+}
+
+function openConflictModal(c) {
+    document.getElementById('conflictModalId').value = c.id;
+    document.getElementById('conflictCustomValue').value = '';
+    document.getElementById('conflictModalBody').innerHTML = `
+        <div style="margin-bottom:10px;"><b>${escapeHtml(c.product || '')}</b> · <span style="color:#64748b;">${escapeHtml(c.field || '')}</span></div>
+        <div style="display:flex;gap:10px;">
+            <div style="flex:1;padding:10px;background:#f8fafc;border-radius:6px;"><div style="font-size:11px;color:#64748b;">OLD value</div><div style="font-weight:600;">${escapeHtml(c.old_value || '')}</div></div>
+            <div style="flex:1;padding:10px;background:#f8fafc;border-radius:6px;"><div style="font-size:11px;color:#64748b;">NEW value</div><div style="font-weight:600;">${escapeHtml(c.new_value || '')}</div></div>
+        </div>`;
+    document.getElementById('conflictModal').style.display = 'flex';
+}
+
+function closeConflictModal() {
+    document.getElementById('conflictModal').style.display = 'none';
+}
+
+async function submitConflictResolution(resolution) {
+    const id = document.getElementById('conflictModalId').value;
+    const customValue = document.getElementById('conflictCustomValue').value.trim();
+    if (resolution === 'custom' && !customValue) {
+        settingsToast('Type a custom value first', 'error');
+        return;
+    }
+    try {
+        const res = await fetch('/api/ai/conflicts/' + id + '/resolve', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resolution, custom_value: customValue || null }),
+        });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'resolve failed'); }
+        settingsToast('Conflict resolved: ' + resolution, 'success');
+        closeConflictModal();
+        refreshConflicts();
+    } catch (e) { settingsToast('Resolve failed: ' + e.message, 'error'); }
 }
 
 async function saveAiGlobalMode(mode) {
@@ -12179,6 +13358,1122 @@ function showTaskToast(msg) {
     toast.textContent = msg;
     toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 2500);
+}
+
+// ==========================================================================
+// COMMAND CENTER
+// ==========================================================================
+
+let _ccCharts = {}; // store ApexCharts instances so we can destroy on re-render
+let _ccData = { overview: null, reps: [], slaBreaches: [], unanswered: [], patterns: null, anomalies: null, notes: [] };
+// Selected date window in hours; null = "use latest run snapshot"
+let _ccRangeHours = null;
+let _ccCustomFrom = null;  // yyyy-mm-dd
+let _ccCustomTo = null;    // yyyy-mm-dd
+
+function ccSetRange(hours) {
+    _ccRangeHours = Number(hours);
+    _ccCustomFrom = null;
+    _ccCustomTo = null;
+    document.querySelectorAll('.cc-range-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.hours === String(hours));
+    });
+    loadCommandCenter();
+}
+
+function ccOpenCustomRange() {
+    const m = document.getElementById('ccRangeModal');
+    if (!m) return;
+    // Default to last 7 days
+    const today = new Date();
+    const weekAgo = new Date(today.getTime() - 7 * 24 * 3600 * 1000);
+    const fmt = d => d.toISOString().slice(0, 10);
+    const fromEl = document.getElementById('ccRangeFrom');
+    const toEl = document.getElementById('ccRangeTo');
+    if (fromEl && !fromEl.value) fromEl.value = _ccCustomFrom || fmt(weekAgo);
+    if (toEl && !toEl.value) toEl.value = _ccCustomTo || fmt(today);
+    m.classList.add('open');
+}
+function ccCloseCustomRange() {
+    const m = document.getElementById('ccRangeModal');
+    if (m) m.classList.remove('open');
+}
+function ccApplyCustomRange() {
+    const from = document.getElementById('ccRangeFrom').value;
+    const to = document.getElementById('ccRangeTo').value;
+    if (!from || !to) { alert('Pick both dates'); return; }
+    if (new Date(from) > new Date(to)) { alert('"From" must be before "To"'); return; }
+    _ccCustomFrom = from;
+    _ccCustomTo = to;
+    // Compute hours between for the live-charts call
+    const ms = new Date(to + 'T23:59:59Z').getTime() - new Date(from + 'T00:00:00Z').getTime();
+    _ccRangeHours = Math.max(1, Math.ceil(ms / 3600000));
+    document.querySelectorAll('.cc-range-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.hours === 'custom');
+    });
+    ccCloseCustomRange();
+    loadCommandCenter();
+}
+
+function ccRangeLabel() {
+    if (_ccCustomFrom && _ccCustomTo) return `${_ccCustomFrom} → ${_ccCustomTo}`;
+    if (_ccRangeHours == null || _ccRangeHours === 24) return 'Last 24h';
+    if (_ccRangeHours <= 168) return 'Last 7 days';
+    if (_ccRangeHours <= 720) return 'Last 30 days';
+    if (_ccRangeHours <= 2160) return 'Last 90 days';
+    return `Last ${Math.round(_ccRangeHours / 24)} days`;
+}
+
+async function loadCommandCenter() {
+    const container = document.getElementById('commandCenterContainer');
+    if (!container) return;
+    // Render shell immediately
+    container.innerHTML = ccShellHtml();
+    // Kick off data fetch in parallel
+    ccLoadOverview();
+    ccLoadReps();
+    ccLoadNotes();
+    ccLoadPatterns();    // lazy — AI calls, will resolve later
+    ccLoadAnomalies();   // lazy
+    ccLoadConfig();      // SLA threshold + snoozes
+}
+
+function ccShellHtml() {
+    return `
+    <div class="cc-wrap">
+        <div class="cc-header">
+            <div>
+                <div style="display:flex;align-items:center;gap:12px">
+                    <button class="cc-back-btn" onclick="switchTab('inbox')" title="Back to Inbox">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+                        Back
+                    </button>
+                    <div>
+                        <div class="cc-title">Command Center</div>
+                        <div class="cc-subtitle" id="ccSubtitle">Loading latest metrics…</div>
+                    </div>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <div class="cc-range-pill" id="ccRangePill">
+                    <button class="cc-range-btn active" data-hours="24"  onclick="ccSetRange(24)">24h</button>
+                    <button class="cc-range-btn"        data-hours="168" onclick="ccSetRange(168)">7d</button>
+                    <button class="cc-range-btn"        data-hours="720" onclick="ccSetRange(720)">30d</button>
+                    <button class="cc-range-btn"        data-hours="2160" onclick="ccSetRange(2160)">90d</button>
+                    <button class="cc-range-btn"        data-hours="custom" onclick="ccOpenCustomRange()">Custom…</button>
+                </div>
+                <button class="cc-btn ghost sm" onclick="ccExportPdf()" title="Print / Save as PDF">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>
+                    Export PDF
+                </button>
+                <button class="cc-btn sm" onclick="loadCommandCenter()" title="Refresh">⟳ Refresh</button>
+            </div>
+        </div>
+        <!-- Custom date range modal -->
+        <div id="ccRangeModal" class="cc-modal-overlay" onclick="if(event.target===this)ccCloseCustomRange()">
+            <div class="cc-modal" style="max-width:420px">
+                <div class="cc-modal-header">
+                    <div class="cc-modal-title">Custom date range</div>
+                    <button class="cc-modal-close" onclick="ccCloseCustomRange()">×</button>
+                </div>
+                <div class="cc-modal-body">
+                    <div style="display:flex;flex-direction:column;gap:12px">
+                        <label style="font-size:12px;color:#64748b;font-weight:600">From
+                            <input type="date" id="ccRangeFrom" style="display:block;margin-top:4px;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;width:100%"/>
+                        </label>
+                        <label style="font-size:12px;color:#64748b;font-weight:600">To
+                            <input type="date" id="ccRangeTo" style="display:block;margin-top:4px;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;width:100%"/>
+                        </label>
+                        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+                            <button class="cc-btn ghost sm" onclick="ccCloseCustomRange()">Cancel</button>
+                            <button class="cc-btn sm" onclick="ccApplyCustomRange()">Apply</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- KPI row -->
+        <div class="cc-kpi-row" id="ccKpiRow">
+            <div class="cc-kpi"><div class="cc-kpi-label">Loading…</div><div class="cc-skeleton" style="width:60%;height:28px;margin-top:8px"></div></div>
+            <div class="cc-kpi"><div class="cc-kpi-label">Loading…</div><div class="cc-skeleton" style="width:60%;height:28px;margin-top:8px"></div></div>
+            <div class="cc-kpi"><div class="cc-kpi-label">Loading…</div><div class="cc-skeleton" style="width:60%;height:28px;margin-top:8px"></div></div>
+            <div class="cc-kpi"><div class="cc-kpi-label">Loading…</div><div class="cc-skeleton" style="width:60%;height:28px;margin-top:8px"></div></div>
+        </div>
+
+        <!-- Charts grid -->
+        <div class="cc-charts-grid">
+            <div class="cc-section">
+                <div class="cc-section-header">
+                    <div class="cc-section-title">SLA compliance</div>
+                    <div class="cc-section-desc" id="ccSlaDesc">—</div>
+                </div>
+                <div id="ccSlaGauge" style="min-height:280px"></div>
+            </div>
+            <div class="cc-section">
+                <div class="cc-section-header">
+                    <div class="cc-section-title">Response time distribution</div>
+                </div>
+                <div id="ccDistChart" style="min-height:280px"></div>
+            </div>
+        </div>
+
+        <div class="cc-section">
+            <div class="cc-section-header">
+                <div class="cc-section-title">Hourly volume (past 24h)</div>
+                <div class="cc-section-desc" id="ccBusyDesc">—</div>
+            </div>
+            <div id="ccBusyChart" style="min-height:260px"></div>
+        </div>
+
+        <!-- AI Anomalies + Patterns -->
+        <div class="cc-charts-grid">
+            <div class="cc-section">
+                <div class="cc-section-header">
+                    <div class="cc-section-title">⚠️ Anomaly callouts</div>
+                    <button class="cc-btn ghost sm" onclick="ccLoadAnomalies()">↻ Regenerate</button>
+                </div>
+                <div id="ccAnomalies"><div class="cc-skeleton" style="height:80px"></div></div>
+            </div>
+            <div class="cc-section">
+                <div class="cc-section-header">
+                    <div class="cc-section-title">🔍 Patterns the AI noticed</div>
+                    <button class="cc-btn ghost sm" onclick="ccLoadPatterns()">↻ Regenerate</button>
+                </div>
+                <div id="ccPatterns"><div class="cc-skeleton" style="height:80px"></div></div>
+            </div>
+        </div>
+
+        <!-- Rep leaderboard -->
+        <div class="cc-section">
+            <div class="cc-section-header">
+                <div class="cc-section-title">Team performance</div>
+                <div class="cc-section-desc">Tap a rep for their detail and AI coaching report card</div>
+            </div>
+            <div id="ccRepGrid" class="cc-rep-grid"><div class="cc-skeleton" style="height:100px"></div></div>
+        </div>
+
+        <!-- Manager notes -->
+        <div class="cc-section">
+            <div class="cc-section-header">
+                <div class="cc-section-title">📒 Manager journal</div>
+            </div>
+            <div style="margin-bottom:12px">
+                <textarea id="ccNoteInput" rows="2" placeholder="Add a note for today (e.g. 'Alex out sick, Casey covered 2x volume')…" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;resize:vertical;font-family:inherit"></textarea>
+                <div style="display:flex;gap:8px;margin-top:8px">
+                    <button class="cc-btn sm" onclick="ccAddNote()">Save note</button>
+                    <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#64748b"><input type="checkbox" id="ccNotePin"> Pin</label>
+                </div>
+            </div>
+            <div id="ccNotesList"></div>
+        </div>
+
+        <!-- Quick Config: SLA threshold + Alert snoozes -->
+        <div class="cc-charts-grid">
+            <div class="cc-section">
+                <div class="cc-section-header">
+                    <div class="cc-section-title">⚙️ SLA threshold</div>
+                    <div class="cc-section-desc">Threads over this first-response time count as a breach.</div>
+                </div>
+                <div id="ccSlaConfig">
+                    <div class="cc-skeleton" style="height:60px"></div>
+                </div>
+            </div>
+            <div class="cc-section">
+                <div class="cc-section-header">
+                    <div class="cc-section-title">🔕 Alert snoozes</div>
+                    <button class="cc-btn ghost sm" onclick="ccAddSnoozePrompt()">+ Add snooze</button>
+                </div>
+                <div id="ccSnoozeList"><div class="cc-skeleton" style="height:60px"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Drill-down modal -->
+    <div class="cc-modal-overlay" id="ccModal" onclick="if(event.target===this)ccCloseModal()">
+        <div class="cc-modal">
+            <div class="cc-modal-header">
+                <div class="cc-modal-title" id="ccModalTitle">Detail</div>
+                <button class="cc-modal-close" onclick="ccCloseModal()">×</button>
+            </div>
+            <div class="cc-modal-body" id="ccModalBody"></div>
+        </div>
+    </div>
+    `;
+}
+
+async function ccLoadOverview() {
+    try {
+        const r = await fetch('/api/command-center/overview', { credentials: 'include' });
+        if (!r.ok) throw new Error('Failed to load overview');
+        const data = await r.json();
+        _ccData.overview = data;
+
+        const subEl = document.getElementById('ccSubtitle');
+        if (data.run) {
+            const when = new Date(data.run.completed_at).toLocaleString();
+            subEl.textContent = `Latest run: ${data.run.total_threads} threads analyzed · completed ${when} · mailbox ${data.mailbox} · ${ccRangeLabel()}`;
+        } else {
+            subEl.textContent = (data.message || 'No run data yet') + ' · ' + ccRangeLabel();
+            // No run? Still try the live charts so something renders.
+        }
+
+        // If a non-default date range is selected, drive the WHOLE page from
+        // live-charts so the user actually sees data for the chosen window.
+        // Otherwise keep using the latest-run snapshot (existing behavior) and
+        // only fall back to live-charts for missing chart data.
+        const usingRange = _ccRangeHours != null && _ccRangeHours !== 24;
+        if (data.summary) {
+            if (!usingRange) {
+                ccRenderKpis(data);
+                ccRenderSlaGauge(data);
+            }
+            ccRenderDistribution(data);
+            ccRenderBusy(data);
+        }
+
+        const s = (data && data.summary) || {};
+        const needDist = !s.response_distribution || !s.response_distribution.buckets || !s.response_distribution.buckets.some(b => b.count > 0);
+        const needBusy = !s.busy_hours || !s.busy_hours.hours || !s.busy_hours.hours.some(h => h.count > 0);
+
+        if (usingRange || needDist || needBusy) {
+            try {
+                const hours = _ccRangeHours || 168;
+                const lc = await fetch('/api/command-center/live-charts?hours=' + hours, { credentials: 'include' });
+                if (lc.ok) {
+                    const live = await lc.json();
+                    const enriched = { ...data, summary: { ...s } };
+                    if (live.distribution) enriched.summary.response_distribution = live.distribution;
+                    if (live.busy_hours) enriched.summary.busy_hours = live.busy_hours;
+                    if (live.sla && live.sla.compliance_pct != null) {
+                        // When user picked a date range, override; otherwise only patch if missing.
+                        if (usingRange || enriched.summary.sla_compliance_pct == null) {
+                            enriched.summary.sla_compliance_pct = live.sla.compliance_pct;
+                            enriched.summary.sla_breach_count = live.sla.breaches;
+                            enriched.summary.answered_threads = live.sla.responded;
+                        }
+                    }
+                    if (usingRange) {
+                        // Replace headline fields with range-derived numbers
+                        enriched.run = { ...(data.run || {}), total_threads: live.total_conversations };
+                        enriched.summary.total_threads = live.total_conversations;
+                        if (live.avg_first_response_ms != null) {
+                            enriched.summary.overall_first_response_avg_ms = live.avg_first_response_ms;
+                        }
+                    }
+                    _ccData.overview = enriched;
+                    ccRenderDistribution(enriched);
+                    ccRenderBusy(enriched);
+                    ccRenderSlaGauge(enriched);
+                    ccRenderKpis(enriched);
+                }
+            } catch (liveErr) {
+                console.warn('Live charts fetch failed:', liveErr);
+            }
+        }
+    } catch (err) {
+        console.error('CC overview error:', err);
+        document.getElementById('ccSubtitle').textContent = 'Failed to load overview: ' + err.message;
+    }
+}
+
+function ccRenderKpis(data) {
+    const s = data.summary || {};
+    const prev = s.previous_period || {};
+    const flags = data.flag_counts || {};
+
+    function pct(curr, p, goodIsDown) {
+        if (curr == null || p == null || p === 0) return null;
+        const delta = ((curr - p) / p) * 100;
+        const isGood = goodIsDown ? delta < 0 : delta > 0;
+        return { pct: Math.round(delta), isGood };
+    }
+    function deltaHtml(curr, p, goodIsDown) {
+        const d = pct(curr, p, goodIsDown);
+        if (!d) return '';
+        const cls = d.isGood ? 'down' : (d.pct === 0 ? 'flat' : 'up');
+        const arrow = d.pct > 0 ? '▲' : (d.pct < 0 ? '▼' : '→');
+        return `<span class="cc-kpi-delta ${cls}">${arrow} ${Math.abs(d.pct)}%</span>`;
+    }
+
+    // SLA compliance: use stored value, or compute from breaches/answered if missing
+    let slaPct = s.sla_compliance_pct;
+    if (slaPct == null && s.answered_threads > 0 && s.sla_breach_count != null) {
+        slaPct = Math.max(0, 100 - Math.round((s.sla_breach_count / s.answered_threads) * 100));
+    }
+    const totalThreads = data.run ? data.run.total_threads : 0;
+    const breachCount = s.sla_breach_count || 0;
+    // Prefer summary value, then fall back to flag counts
+    const unansweredCount = s.unanswered_threads != null ? s.unanswered_threads : (flags.unanswered || 0);
+    const avgMs = s.overall_first_response_avg_ms;
+
+    const row = document.getElementById('ccKpiRow');
+    row.innerHTML = `
+        <div class="cc-kpi" style="--kpi-accent:#4f46e5">
+            <div class="cc-kpi-label">Threads</div>
+            <div class="cc-kpi-value" data-animate-to="${totalThreads}">0</div>
+            <div class="cc-kpi-sub">${deltaHtml(totalThreads, prev.total_threads, false) || 'vs previous period'}</div>
+        </div>
+        <div class="cc-kpi clickable" style="--kpi-accent:${slaPct >= 90 ? '#059669' : slaPct >= 70 ? '#f59e0b' : '#dc2626'}" onclick="ccOpenSlaBreaches()">
+            <div class="cc-kpi-label">SLA compliance</div>
+            <div class="cc-kpi-value" data-animate-to="${slaPct != null ? slaPct : 0}" data-suffix="%">0%</div>
+            <div class="cc-kpi-sub">${breachCount} breaches ${deltaHtml(slaPct, prev.sla_compliance_pct, false)}</div>
+        </div>
+        <div class="cc-kpi clickable" style="--kpi-accent:#ef4444" onclick="ccOpenUnanswered()">
+            <div class="cc-kpi-label">Unanswered</div>
+            <div class="cc-kpi-value" data-animate-to="${unansweredCount}">0</div>
+            <div class="cc-kpi-sub">${deltaHtml(unansweredCount, prev.unanswered_threads, true) || 'Tap to triage'}</div>
+        </div>
+        <div class="cc-kpi" style="--kpi-accent:#8b5cf6">
+            <div class="cc-kpi-label">Avg first response</div>
+            <div class="cc-kpi-value">${ccFmtDuration(avgMs) || '—'}</div>
+            <div class="cc-kpi-sub">${deltaHtml(avgMs, prev.overall_first_response_avg_ms, true) || ' '}</div>
+        </div>
+    `;
+
+    // Animate number counters with anime.js bounce
+    if (typeof anime !== 'undefined') {
+        row.querySelectorAll('[data-animate-to]').forEach(el => {
+            const target = parseFloat(el.getAttribute('data-animate-to'));
+            const suffix = el.getAttribute('data-suffix') || '';
+            const obj = { v: 0 };
+            anime({
+                targets: obj,
+                v: target,
+                duration: 1400,
+                easing: 'easeOutElastic(1, .6)',
+                update: () => { el.textContent = Math.round(obj.v) + suffix; }
+            });
+        });
+    }
+}
+
+function ccRenderSlaGauge(data) {
+    const s = data.summary || {};
+    let pct = s.sla_compliance_pct;
+    if (pct == null && s.answered_threads > 0 && s.sla_breach_count != null) {
+        pct = Math.max(0, 100 - Math.round((s.sla_breach_count / s.answered_threads) * 100));
+    }
+    if (pct == null) pct = 0;
+    const color = pct >= 90 ? '#059669' : pct >= 70 ? '#f59e0b' : '#dc2626';
+    const descEl = document.getElementById('ccSlaDesc');
+    if (descEl) descEl.textContent = `${s.sla_breach_count || 0} breaches of ${s.answered_threads || s.total_threads || 0} responded`;
+
+    ccDestroyChart('slaGauge');
+    const el = document.getElementById('ccSlaGauge');
+    if (!el || typeof ApexCharts === 'undefined') return;
+    _ccCharts.slaGauge = new ApexCharts(el, {
+        chart: {
+            type: 'radialBar',
+            height: 260,
+            animations: { enabled: true, easing: 'elastic', speed: 1500, animateGradually: { enabled: true, delay: 150 }, dynamicAnimation: { enabled: true, speed: 600 } }
+        },
+        series: [pct],
+        colors: [color],
+        plotOptions: {
+            radialBar: {
+                hollow: { size: '62%' },
+                track: { background: '#e2e8f0', strokeWidth: '100%' },
+                dataLabels: {
+                    name: { offsetY: -10, color: '#64748b', fontSize: '12px' },
+                    value: { offsetY: 4, fontSize: '32px', fontWeight: 800, color: color, formatter: v => v + '%' }
+                }
+            }
+        },
+        fill: { type: 'gradient', gradient: { shade: 'light', type: 'horizontal', gradientToColors: [color], stops: [0,100] } },
+        stroke: { lineCap: 'round' },
+        labels: ['Compliance']
+    });
+    _ccCharts.slaGauge.render();
+}
+
+function ccRenderDistribution(data) {
+    const dist = (data.summary || {}).response_distribution;
+    ccDestroyChart('dist');
+    const el = document.getElementById('ccDistChart');
+    if (!el || typeof ApexCharts === 'undefined') return;
+    if (!dist || !dist.buckets || !dist.buckets.some(b => b.count > 0)) {
+        el.innerHTML = `<div style="padding:24px 20px;color:#64748b;font-size:13px;line-height:1.5">
+            <div style="font-weight:600;color:#0f172a;margin-bottom:6px">Distribution not in this run</div>
+            Re-run the metrics analysis to populate response-time buckets.
+            <div style="margin-top:10px"><button class="cc-btn sm" onclick="switchTab('settings'); setTimeout(()=>{try{showSettingsSection(\'ai\')}catch(e){}},200)">Open AI Settings →</button></div>
+        </div>`;
+        return;
+    }
+    const labels = dist.buckets.map(b => b.label);
+    const counts = dist.buckets.map(b => b.count);
+    const colors = ['#059669','#65a30d','#f59e0b','#f97316','#dc2626'];
+    _ccCharts.dist = new ApexCharts(el, {
+        chart: { type: 'bar', height: 260, toolbar: { show:false }, animations: { enabled: true, easing: 'easeOutBounce', speed: 800, animateGradually: { enabled: true, delay: 100 } } },
+        series: [{ name: 'Threads', data: counts }],
+        plotOptions: { bar: { borderRadius: 8, horizontal: true, distributed: true, barHeight: '70%' } },
+        colors,
+        xaxis: { categories: labels, labels: { style: { colors: '#64748b', fontSize: '11px' } } },
+        yaxis: { labels: { style: { colors: '#334155', fontSize: '12px', fontWeight: 600 } } },
+        dataLabels: { enabled: true, style: { fontSize: '11px', fontWeight: 700 }, formatter: v => v > 0 ? v : '' },
+        legend: { show: false },
+        tooltip: { y: { formatter: v => v + ' threads' } },
+        grid: { borderColor: '#f1f5f9' }
+    });
+    _ccCharts.dist.render();
+}
+
+function ccRenderBusy(data) {
+    const busy = (data.summary || {}).busy_hours;
+    ccDestroyChart('busy');
+    const el = document.getElementById('ccBusyChart');
+    const descEl = document.getElementById('ccBusyDesc');
+    if (!el || typeof ApexCharts === 'undefined') return;
+    if (!busy || !busy.hours || !busy.hours.some(h => h.count > 0)) {
+        el.innerHTML = `<div style="padding:24px 20px;color:#64748b;font-size:13px;line-height:1.5">
+            <div style="font-weight:600;color:#0f172a;margin-bottom:6px">Hourly breakdown not in this run</div>
+            Re-run the metrics analysis to populate the hour-by-hour volume chart.
+            <div style="margin-top:10px"><button class="cc-btn sm" onclick="switchTab('settings'); setTimeout(()=>{try{showSettingsSection(\'ai\')}catch(e){}},200)">Open AI Settings →</button></div>
+        </div>`;
+        return;
+    }
+    const hours = busy.hours;
+    const cats = hours.map(h => String(h.hour).padStart(2,'0') + ':00');
+    const counts = hours.map(h => h.count);
+    const peakHour = busy.peak_hour;
+    if (descEl) descEl.textContent = `Peak ${peakHour}:00 · ${busy.after_hours_count || 0} after-hours · ${busy.weekend_count || 0} weekend`;
+    const colors = counts.map((_, i) => i === peakHour ? '#ef4444' : (i >= 9 && i < 17 ? '#4f46e5' : '#94a3b8'));
+
+    _ccCharts.busy = new ApexCharts(el, {
+        chart: { type: 'bar', height: 240, toolbar: { show:false }, animations: { enabled: true, easing: 'easeOutBack', speed: 700, animateGradually: { enabled: true, delay: 30 } } },
+        series: [{ name: 'Threads', data: counts }],
+        plotOptions: { bar: { borderRadius: 4, columnWidth: '70%', distributed: true } },
+        colors,
+        xaxis: { categories: cats, labels: { style: { colors: '#64748b', fontSize: '10px' }, rotate: -45 } },
+        yaxis: { labels: { style: { colors: '#64748b', fontSize: '11px' } } },
+        dataLabels: { enabled: false },
+        legend: { show: false },
+        grid: { borderColor: '#f1f5f9' },
+        tooltip: { y: { formatter: v => v + ' threads' } }
+    });
+    _ccCharts.busy.render();
+}
+
+function ccDestroyChart(key) {
+    if (_ccCharts[key] && typeof _ccCharts[key].destroy === 'function') {
+        try { _ccCharts[key].destroy(); } catch(e){}
+        _ccCharts[key] = null;
+    }
+}
+
+function ccFmtDuration(ms) {
+    if (ms == null) return null;
+    const mins = Math.round(ms / 60000);
+    if (mins < 60) return mins + 'm';
+    const hrs = Math.floor(mins / 60);
+    const rem = mins % 60;
+    if (hrs < 24) return hrs + 'h ' + rem + 'm';
+    return Math.floor(hrs / 24) + 'd ' + (hrs % 24) + 'h';
+}
+
+// ----- Reps -----
+async function ccLoadReps() {
+    try {
+        const r = await fetch('/api/command-center/reps', { credentials:'include' });
+        const data = await r.json();
+        _ccData.reps = data.reps || [];
+        ccRenderRepGrid();
+    } catch (err) {
+        document.getElementById('ccRepGrid').innerHTML = '<div style="color:#dc2626">Failed to load reps: '+ err.message +'</div>';
+    }
+}
+
+function ccRenderRepGrid() {
+    const grid = document.getElementById('ccRepGrid');
+    if (!grid) return;
+    if (!_ccData.reps.length) {
+        grid.innerHTML = '<div style="color:#94a3b8;font-size:13px">No rep activity in latest run.</div>';
+        return;
+    }
+    grid.innerHTML = _ccData.reps.map(r => {
+        const trendLabel = r.trending === 'improving' ? `▼ ${r.delta_label || ''}` : r.trending === 'degrading' ? `▲ ${r.delta_label || ''}` : '→ flat';
+        return `
+        <div class="cc-rep-tile" onclick="ccOpenRepDetail('${encodeURIComponent(r.rep_email)}')">
+            <div class="cc-rep-name">${escapeHtml(r.name || r.rep_email)}</div>
+            <div class="cc-rep-email">${escapeHtml(r.rep_email)}</div>
+            <div class="cc-rep-stats">
+                <div><div class="cc-rep-stat-label">Threads</div><div class="cc-rep-stat-value">${r.responded_count}</div></div>
+                <div><div class="cc-rep-stat-label">Avg FRT</div><div class="cc-rep-stat-value">${r.avg_label || '—'}</div></div>
+                <div><div class="cc-rep-stat-label">Breaches</div><div class="cc-rep-stat-value" style="color:${r.breach_count > 0 ? '#dc2626' : '#0f172a'}">${r.breach_count}</div></div>
+            </div>
+            <div class="cc-rep-trend ${r.trending}">${trendLabel}</div>
+        </div>`;
+    }).join('');
+}
+
+// ----- Drill-downs (modal) -----
+function ccOpenModal(title, bodyHtml) {
+    document.getElementById('ccModalTitle').textContent = title;
+    document.getElementById('ccModalBody').innerHTML = bodyHtml;
+    document.getElementById('ccModal').classList.add('active');
+}
+function ccCloseModal() {
+    document.getElementById('ccModal').classList.remove('active');
+}
+
+async function ccOpenSlaBreaches() {
+    ccOpenModal('SLA breaches', '<div class="cc-skeleton" style="height:80px"></div>');
+    try {
+        const r = await fetch('/api/command-center/sla-breaches', { credentials:'include' });
+        const data = await r.json();
+        _ccData.slaBreaches = data.items || [];
+        ccRenderThreadList('SLA breaches · ' + data.items.length, data.items, 'breach');
+    } catch (err) {
+        document.getElementById('ccModalBody').innerHTML = '<div style="color:#dc2626">' + err.message + '</div>';
+    }
+}
+
+async function ccOpenUnanswered() {
+    ccOpenModal('Unanswered threads', '<div class="cc-skeleton" style="height:80px"></div>');
+    try {
+        const r = await fetch('/api/command-center/unanswered', { credentials:'include' });
+        const data = await r.json();
+        _ccData.unanswered = data.items || [];
+        ccRenderThreadList('Unanswered · ' + data.items.length, data.items, 'unanswered');
+    } catch (err) {
+        document.getElementById('ccModalBody').innerHTML = '<div style="color:#dc2626">' + err.message + '</div>';
+    }
+}
+
+function ccRenderThreadList(title, items, kind) {
+    document.getElementById('ccModalTitle').textContent = title;
+    if (!items.length) {
+        document.getElementById('ccModalBody').innerHTML = '<div style="color:#059669;padding:20px;text-align:center">🎉 Nothing to triage. Great work!</div>';
+        return;
+    }
+    // Stash the items so the back-button on thread detail can re-render them
+    // without another network round-trip.
+    _ccData._lastThreadList = { title, items, kind };
+    const rows = items.map(it => {
+        const subj = escapeHtml(it.thread_subject || '(no subject)');
+        const customer = escapeHtml(it.customer_email || '—');
+        const rep = escapeHtml(it.rep_email || 'unassigned');
+        const sev = it.severity || 'medium';
+        const age = kind === 'unanswered' ? (it.wait_label ? 'waiting ' + it.wait_label : '') : (it.age_label ? 'took ' + it.age_label : '');
+        const canReply = !!it.conversation_id;
+        const gid = (it.gmail_thread_id || '').replace(/'/g, "\\'");
+        // Whole row is clickable -> opens the thread detail viewer.
+        // Action buttons stop propagation so they still work.
+        return `
+        <div class="cc-thread-row" style="cursor:pointer" onclick="ccOpenThreadDetail('${gid}')">
+            <div>
+                <div class="cc-thread-subject">${subj}</div>
+                <div class="cc-thread-meta">
+                    <span class="cc-badge ${sev}">${sev}</span>
+                    <span>${customer}</span>
+                    <span>·</span>
+                    <span>rep: ${rep}</span>
+                    ${age ? `<span>·</span><span>${age}</span>` : ''}
+                    <span style="color:#94a3b8;margin-left:6px">→ click to read</span>
+                </div>
+            </div>
+            <div class="cc-thread-actions" onclick="event.stopPropagation()">
+                ${canReply ? `<button class="cc-btn sm" onclick="ccQuickReply('${gid}')">Reply</button>` : ''}
+                ${canReply ? `<button class="cc-btn sm warn" onclick="ccQuickApology('${gid}')">Apology</button>` : ''}
+                ${canReply ? `<button class="cc-btn sm ghost" onclick="ccReassign('${gid}')">Reassign</button>` : ''}
+                ${it.conversation_id ? `<button class="cc-btn sm ghost" onclick="ccOpenThreadInApp('${it.conversation_id}')">Open in inbox</button>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+    document.getElementById('ccModalBody').innerHTML = rows;
+}
+
+// ---- Inline thread detail viewer ----
+async function ccOpenThreadDetail(gmailThreadId) {
+    if (!gmailThreadId) return;
+    const back = _ccData._lastThreadList || null;
+    const backBtn = back
+        ? `<button class="cc-btn sm ghost" onclick="ccBackToThreadList()" style="margin-right:8px">← Back to list</button>`
+        : '';
+    document.getElementById('ccModalTitle').textContent = 'Loading thread…';
+    document.getElementById('ccModalBody').innerHTML = `
+        <div style="margin-bottom:12px">${backBtn}</div>
+        <div class="cc-skeleton" style="height:120px"></div>`;
+    try {
+        const r = await fetch('/api/command-center/thread/' + encodeURIComponent(gmailThreadId), { credentials:'include' });
+        const data = await r.json();
+        if (!r.ok) {
+            const link = data.gmail_link
+                ? `<a href="${data.gmail_link}" target="_blank" rel="noopener" style="color:#4f46e5">Open in Gmail ↗</a>`
+                : '';
+            document.getElementById('ccModalBody').innerHTML = `
+                <div style="margin-bottom:12px">${backBtn}</div>
+                <div style="color:#dc2626;padding:16px">${escapeHtml(data.error || 'Failed to load')}</div>
+                <div style="padding:8px 16px">${link}</div>`;
+            return;
+        }
+        ccRenderThreadDetail(data, backBtn);
+    } catch (err) {
+        document.getElementById('ccModalBody').innerHTML = `
+            <div style="margin-bottom:12px">${backBtn}</div>
+            <div style="color:#dc2626">${escapeHtml(err.message)}</div>`;
+    }
+}
+
+function ccBackToThreadList() {
+    const ctx = _ccData._lastThreadList;
+    if (!ctx) { ccCloseModal(); return; }
+    ccRenderThreadList(ctx.title, ctx.items, ctx.kind);
+}
+
+function ccRenderThreadDetail(data, backBtnHtml) {
+    document.getElementById('ccModalTitle').textContent = data.subject || '(no subject)';
+    const headerActions = `
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+            ${backBtnHtml || ''}
+            ${data.conversation_id
+                ? `<button class="cc-btn sm" onclick="ccOpenThreadInApp('${data.conversation_id}')">Open in inbox</button>
+                   <button class="cc-btn sm warn" onclick="ccQuickApology('${data.gmail_thread_id}')">Send apology</button>
+                   <button class="cc-btn sm" onclick="ccQuickReply('${data.gmail_thread_id}')">Quick reply</button>`
+                : ''}
+            <a href="${data.gmail_link}" target="_blank" rel="noopener" class="cc-btn sm ghost" style="text-decoration:none">Open in Gmail ↗</a>
+            <span style="font-size:11px;color:#94a3b8;margin-left:auto">${data.message_count} message${data.message_count === 1 ? '' : 's'}</span>
+        </div>`;
+
+    const fmtDate = iso => {
+        if (!iso) return '';
+        try {
+            const d = new Date(iso);
+            return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+        } catch { return iso; }
+    };
+
+    const messagesHtml = (data.messages || []).map((m, i) => {
+        const body = (m.body_clean || m.body_full || m.snippet || '').trim();
+        // Render plain text safely with line-breaks preserved.
+        const safeBody = escapeHtml(body).replace(/\n/g, '<br>');
+        const fromHtml = escapeHtml(m.from || m.from_email || 'unknown');
+        const toHtml = m.to ? `<div style="font-size:11px;color:#94a3b8">to ${escapeHtml(m.to)}</div>` : '';
+        const ccHtml = m.cc ? `<div style="font-size:11px;color:#94a3b8">cc ${escapeHtml(m.cc)}</div>` : '';
+        const hasQuoted = m.body_full && m.body_clean && m.body_full.length > m.body_clean.length + 20;
+        const quotedToggle = hasQuoted
+            ? `<button class="cc-btn sm ghost" style="margin-top:8px;font-size:11px" onclick="ccToggleQuoted(${i})">Show quoted history</button>
+               <div id="ccQuoted_${i}" style="display:none;margin-top:8px;padding:8px;background:#f8fafc;border-left:3px solid #cbd5e1;color:#64748b;font-size:12px;white-space:pre-wrap">${escapeHtml(m.body_full || '')}</div>`
+            : '';
+        return `
+        <div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin-bottom:10px;background:#fff">
+            <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:8px;flex-wrap:wrap">
+                <div>
+                    <div style="font-weight:600;color:#0f172a;font-size:13px">${fromHtml}</div>
+                    ${toHtml}${ccHtml}
+                </div>
+                <div style="font-size:11px;color:#94a3b8;white-space:nowrap">${escapeHtml(fmtDate(m.date_iso))}</div>
+            </div>
+            <div style="font-size:13px;color:#1e293b;line-height:1.5;white-space:pre-wrap">${safeBody || '<span style="color:#94a3b8">(empty body)</span>'}</div>
+            ${quotedToggle}
+        </div>`;
+    }).join('');
+
+    document.getElementById('ccModalBody').innerHTML = headerActions + messagesHtml;
+}
+
+function ccToggleQuoted(i) {
+    const el = document.getElementById('ccQuoted_' + i);
+    if (!el) return;
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function ccQuickReply(threadId) {
+    const text = prompt('Reply text:');
+    if (!text) return;
+    try {
+        const r = await fetch('/api/command-center/thread-action', {
+            method:'POST', credentials:'include', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ action:'reply', gmail_thread_id: threadId, reply_body: text })
+        });
+        if (!r.ok) throw new Error((await r.json()).error || 'Failed');
+        settingsToast('Reply sent', 'success');
+    } catch (err) { settingsToast('Failed: ' + err.message, 'error'); }
+}
+
+async function ccQuickApology(threadId) {
+    const extra = prompt('Add any personal note (optional):', '');
+    if (extra === null) return;
+    try {
+        const r = await fetch('/api/command-center/thread-action', {
+            method:'POST', credentials:'include', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ action:'apology', gmail_thread_id: threadId, reply_body: extra })
+        });
+        if (!r.ok) throw new Error((await r.json()).error || 'Failed');
+        settingsToast('Apology sent', 'success');
+    } catch (err) { settingsToast('Failed: ' + err.message, 'error'); }
+}
+
+async function ccReassign(threadId) {
+    const members = (typeof teamMembers !== 'undefined' ? teamMembers : []);
+    if (!members.length) { settingsToast('No team members loaded', 'error'); return; }
+    const options = members.map((m, i) => `${i+1}. ${m.name} (${m.email})`).join('\n');
+    const pick = prompt('Reassign to:\n' + options + '\n\nEnter number:');
+    if (!pick) return;
+    const idx = parseInt(pick) - 1;
+    if (!members[idx]) return settingsToast('Invalid choice', 'error');
+    try {
+        const r = await fetch('/api/command-center/thread-action', {
+            method:'POST', credentials:'include', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ action:'assign', gmail_thread_id: threadId, assignee_id: members[idx].id })
+        });
+        if (!r.ok) throw new Error((await r.json()).error || 'Failed');
+        settingsToast('Reassigned to ' + members[idx].name, 'success');
+    } catch (err) { settingsToast('Failed: ' + err.message, 'error'); }
+}
+
+function ccOpenThreadInApp(conversationId) {
+    ccCloseModal();
+    switchTab('inbox');
+    if (typeof selectConversation === 'function') {
+        setTimeout(() => selectConversation(conversationId), 300);
+    }
+}
+
+// ----- Rep detail + report card -----
+async function ccOpenRepDetail(emailEnc) {
+    const email = decodeURIComponent(emailEnc);
+    ccOpenModal('Rep: ' + email, '<div class="cc-skeleton" style="height:100px"></div>');
+    try {
+        const r = await fetch('/api/command-center/reps/' + encodeURIComponent(email), { credentials:'include' });
+        const data = await r.json();
+        if (!data.rep) { document.getElementById('ccModalBody').innerHTML = '<div style="color:#94a3b8">No data for this rep in latest run.</div>'; return; }
+
+        const flagsHtml = data.flags.length
+            ? data.flags.map(f => `<div class="cc-thread-row"><div><div class="cc-thread-subject">${escapeHtml(f.thread_subject || '(no subject)')}</div><div class="cc-thread-meta"><span class="cc-badge ${f.severity}">${f.severity}</span><span>${escapeHtml(f.flag_type)}</span><span>${escapeHtml(f.customer_email || '')}</span></div></div><div class="cc-thread-actions"><span style="font-size:11px;color:#64748b">${escapeHtml(f.reason || '')}</span></div></div>`).join('')
+            : '<div style="color:#059669;padding:12px">No flagged threads in latest run.</div>';
+
+        const body = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:20px">
+            <div class="cc-kpi" style="--kpi-accent:#4f46e5;padding:12px;border-radius:10px">
+                <div class="cc-kpi-label">Threads</div>
+                <div style="font-size:22px;font-weight:800">${data.rep.responded_count || 0}</div>
+            </div>
+            <div class="cc-kpi" style="--kpi-accent:#059669;padding:12px;border-radius:10px">
+                <div class="cc-kpi-label">Avg FRT</div>
+                <div style="font-size:22px;font-weight:800">${data.rep.avg_label || '—'}</div>
+            </div>
+            <div class="cc-kpi" style="--kpi-accent:#ef4444;padding:12px;border-radius:10px">
+                <div class="cc-kpi-label">Breaches</div>
+                <div style="font-size:22px;font-weight:800">${data.rep.breach_count || 0}</div>
+            </div>
+        </div>
+        <div id="ccRepTrend" style="min-height:180px;margin-bottom:20px"></div>
+
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+            <button class="cc-btn" onclick="ccGenerateReportCard('${emailEnc}')">✨ Generate AI Report Card</button>
+            <button class="cc-btn ghost" onclick="ccSendReportCard('${emailEnc}')">Send last card to rep</button>
+        </div>
+        <div id="ccReportCard"></div>
+
+        <h4 style="margin:20px 0 8px;font-size:13px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.6px">Flagged threads (${data.flags.length})</h4>
+        ${flagsHtml}
+        `;
+        document.getElementById('ccModalBody').innerHTML = body;
+
+        // Render small trend line for this rep
+        if (data.trend && data.trend.length && typeof ApexCharts !== 'undefined') {
+            ccDestroyChart('repTrend');
+            _ccCharts.repTrend = new ApexCharts(document.getElementById('ccRepTrend'), {
+                chart: { type:'area', height:180, toolbar:{show:false}, animations:{enabled:true, easing:'easeOutQuart', speed:900} },
+                series: [{ name:'Avg FRT (min)', data: data.trend.map(t => t.avg_first_response_ms ? Math.round(t.avg_first_response_ms/60000) : 0) }],
+                xaxis: { categories: data.trend.map(t => new Date(t.completed_at).toLocaleDateString()), labels:{style:{fontSize:'10px',colors:'#64748b'}} },
+                yaxis: { labels:{style:{fontSize:'11px',colors:'#64748b'}, formatter: v => v + 'm' } },
+                stroke: { curve:'smooth', width:3 },
+                fill: { type:'gradient', gradient:{ shade:'light', opacityFrom:0.5, opacityTo:0.05 } },
+                colors: ['#4f46e5'],
+                dataLabels: { enabled:false },
+                grid: { borderColor:'#f1f5f9' },
+                tooltip: { y: { formatter: v => v + ' min' } }
+            });
+            _ccCharts.repTrend.render();
+        }
+    } catch (err) {
+        document.getElementById('ccModalBody').innerHTML = '<div style="color:#dc2626">' + err.message + '</div>';
+    }
+}
+
+async function ccGenerateReportCard(emailEnc) {
+    const target = document.getElementById('ccReportCard');
+    if (target) target.innerHTML = '<div class="cc-skeleton" style="height:100px"></div>';
+    try {
+        const r = await fetch('/api/command-center/reps/' + emailEnc + '/report-card', {
+            method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: '{}'
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Failed to generate');
+        ccRenderReportCard(data);
+    } catch (err) {
+        target.innerHTML = '<div style="color:#dc2626">' + err.message + '</div>';
+    }
+}
+
+function ccRenderReportCard(card) {
+    const t = document.getElementById('ccReportCard');
+    if (!t) return;
+    const strengths = (card.strengths || []).map(s => `<li>${escapeHtml(s)}</li>`).join('');
+    const weaknesses = (card.weaknesses || []).map(s => `<li>${escapeHtml(s)}</li>`).join('');
+    const coachable = (card.coachable_threads || []).map(c => `<li><strong>${escapeHtml(c.subject || '')}</strong> — <span style="color:#64748b">${escapeHtml(c.why || '')}</span></li>`).join('');
+    const questions = (card.suggested_1on1_questions || []).map(q => `<li>${escapeHtml(q)}</li>`).join('');
+    t.innerHTML = `
+    <div style="border:1px solid #c7d2fe;border-radius:12px;padding:16px;background:linear-gradient(135deg,#eef2ff 0%,#fdf4ff 100%)">
+        <div style="font-size:12px;font-weight:700;color:#4f46e5;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:8px">✨ AI Coaching Report Card</div>
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.5">${escapeHtml(card.summary || '')}</p>
+        ${strengths ? '<div style="margin-top:10px"><strong style="color:#059669;font-size:12px">STRENGTHS</strong><ul style="margin:4px 0 0;padding-left:20px;font-size:13px">'+strengths+'</ul></div>' : ''}
+        ${weaknesses ? '<div style="margin-top:10px"><strong style="color:#d97706;font-size:12px">AREAS TO WORK ON</strong><ul style="margin:4px 0 0;padding-left:20px;font-size:13px">'+weaknesses+'</ul></div>' : ''}
+        ${coachable ? '<div style="margin-top:10px"><strong style="color:#4f46e5;font-size:12px">THREADS WORTH REVIEWING</strong><ul style="margin:4px 0 0;padding-left:20px;font-size:13px">'+coachable+'</ul></div>' : ''}
+        ${questions ? '<div style="margin-top:10px"><strong style="color:#7c3aed;font-size:12px">1:1 QUESTIONS</strong><ul style="margin:4px 0 0;padding-left:20px;font-size:13px">'+questions+'</ul></div>' : ''}
+    </div>`;
+    if (typeof anime !== 'undefined') {
+        anime({ targets: t.firstElementChild, translateY: [8, 0], opacity: [0, 1], duration: 500, easing: 'easeOutCubic' });
+    }
+}
+
+async function ccSendReportCard(emailEnc) {
+    if (!confirm('Send the last AI report card to this rep?')) return;
+    try {
+        const r = await fetch('/api/command-center/reps/' + emailEnc + '/send-report-card', {
+            method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:'{}'
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Failed');
+        settingsToast('Sent to ' + data.sent_to, 'success');
+    } catch (err) { settingsToast('Failed: ' + err.message, 'error'); }
+}
+
+// ----- Patterns + Anomalies -----
+async function ccLoadPatterns() {
+    const t = document.getElementById('ccPatterns');
+    if (!t) return;
+    t.innerHTML = '<div class="cc-skeleton" style="height:80px"></div>';
+    try {
+        const r = await fetch('/api/command-center/patterns', { credentials:'include' });
+        const data = await r.json();
+        _ccData.patterns = data;
+        const repeats = data.repeat_questions || [];
+        const trending = data.trending_topics || [];
+        if (!repeats.length && !trending.length) {
+            t.innerHTML = '<div style="color:#64748b;font-size:13px;padding:12px">No notable patterns today.</div>';
+            return;
+        }
+        t.innerHTML = `
+        ${repeats.length ? `<div style="margin-bottom:14px"><strong style="font-size:12px;color:#4f46e5">REPEAT QUESTIONS</strong>` + repeats.map(r => `<div style="background:#eef2ff;border-radius:10px;padding:10px 12px;margin-top:6px;font-size:13px"><strong>${escapeHtml(r.theme)}</strong> <span style="color:#64748b">(${r.count || r.example_subjects?.length || 0})</span><div style="color:#475569;margin-top:4px">💡 ${escapeHtml(r.suggested_canned_reply_topic || '')}</div></div>`).join('') + '</div>' : ''}
+        ${trending.length ? `<div><strong style="font-size:12px;color:#ec4899">TRENDING</strong>` + trending.map(t => `<div style="background:#fdf2f8;border-radius:10px;padding:10px 12px;margin-top:6px;font-size:13px"><strong>${escapeHtml(t.keyword)}</strong><div style="color:#475569;margin-top:4px">${escapeHtml(t.why_it_matters || '')}</div></div>`).join('') + '</div>' : ''}
+        `;
+    } catch (err) {
+        t.innerHTML = '<div style="color:#dc2626;font-size:13px">Pattern analysis failed: ' + err.message + '</div>';
+    }
+}
+
+async function ccLoadAnomalies() {
+    const t = document.getElementById('ccAnomalies');
+    if (!t) return;
+    t.innerHTML = '<div class="cc-skeleton" style="height:80px"></div>';
+    try {
+        const r = await fetch('/api/command-center/anomalies', { credentials:'include' });
+        const data = await r.json();
+        _ccData.anomalies = data;
+        const list = data.anomalies || [];
+        if (!list.length) {
+            t.innerHTML = '<div style="color:#059669;font-size:13px;padding:12px">✓ All metrics within expected ranges.</div>';
+            return;
+        }
+        t.innerHTML = list.map(a => `
+            <div class="cc-anomaly severity-${a.severity || 'medium'}">
+                <div class="cc-anomaly-title">${escapeHtml(a.title)}</div>
+                <div style="font-size:13px;color:#1e293b">${escapeHtml(a.what || '')}</div>
+                ${a.hypothesis ? `<div class="cc-anomaly-hypothesis">💭 ${escapeHtml(a.hypothesis)}</div>` : ''}
+            </div>
+        `).join('');
+    } catch (err) {
+        t.innerHTML = '<div style="color:#dc2626;font-size:13px">Anomaly analysis failed: ' + err.message + '</div>';
+    }
+}
+
+// ----- Notes -----
+async function ccLoadNotes() {
+    const t = document.getElementById('ccNotesList');
+    if (!t) return;
+    try {
+        const r = await fetch('/api/command-center/notes', { credentials:'include' });
+        const data = await r.json();
+        _ccData.notes = data.notes || [];
+        if (!_ccData.notes.length) {
+            t.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:8px 2px">No notes yet. Start your management journal above.</div>';
+            return;
+        }
+        t.innerHTML = _ccData.notes.map(n => `
+            <div class="cc-note ${n.pinned ? 'pinned' : ''}">
+                <div class="cc-note-meta">
+                    <span>${n.pinned ? '📌 ' : ''}${new Date(n.note_date).toLocaleDateString()} · ${escapeHtml(n.author_name || n.author_email || 'unknown')}</span>
+                    <span style="display:flex;gap:4px">
+                        <button class="cc-btn ghost sm" onclick="ccTogglePin('${n.id}', ${!n.pinned})" title="${n.pinned ? 'Unpin' : 'Pin'}">${n.pinned ? 'Unpin' : 'Pin'}</button>
+                        <button class="cc-btn ghost sm" onclick="ccDeleteNote('${n.id}')" style="color:#dc2626">Delete</button>
+                    </span>
+                </div>
+                <div class="cc-note-body">${escapeHtml(n.body)}</div>
+            </div>
+        `).join('');
+    } catch (err) {
+        t.innerHTML = '<div style="color:#dc2626">Failed to load notes</div>';
+    }
+}
+
+async function ccAddNote() {
+    const inp = document.getElementById('ccNoteInput');
+    const pin = document.getElementById('ccNotePin');
+    const body = (inp.value || '').trim();
+    if (!body) return;
+    try {
+        const r = await fetch('/api/command-center/notes', {
+            method:'POST', credentials:'include', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ body, pinned: pin.checked })
+        });
+        if (!r.ok) throw new Error('Failed');
+        inp.value = '';
+        pin.checked = false;
+        ccLoadNotes();
+        settingsToast('Note saved', 'success');
+    } catch (err) { settingsToast('Failed to save note: ' + err.message, 'error'); }
+}
+
+async function ccTogglePin(id, pinned) {
+    try {
+        await fetch('/api/command-center/notes/' + id, {
+            method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ pinned })
+        });
+        ccLoadNotes();
+    } catch (err) { settingsToast('Failed: ' + err.message, 'error'); }
+}
+
+async function ccDeleteNote(id) {
+    if (!confirm('Delete this note?')) return;
+    try {
+        await fetch('/api/command-center/notes/' + id, { method:'DELETE', credentials:'include' });
+        ccLoadNotes();
+    } catch (err) { settingsToast('Failed: ' + err.message, 'error'); }
+}
+
+// ----- PDF export (browser print) -----
+function ccExportPdf() {
+    window.print();
+}
+
+// ----- Quick Config: SLA threshold + Alert snoozes -----
+async function ccLoadConfig() {
+    // SLA threshold stored under app_settings.command_center_config
+    try {
+        const r = await fetch('/api/settings/command_center_config', { credentials: 'include' });
+        const data = r.ok ? await r.json() : { value: null };
+        const cfg = data.value || {};
+        const currentHours = cfg.sla_hours || 4;
+        const slaEl = document.getElementById('ccSlaConfig');
+        if (slaEl) {
+            slaEl.innerHTML = `
+                <div style="font-size:13px;color:#64748b;margin-bottom:8px">Current threshold: <b style="color:#0f172a">${currentHours}h</b></div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <input type="number" id="ccSlaHoursInput" min="1" max="72" step="1" value="${currentHours}" style="width:100px;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px"/>
+                    <span style="font-size:13px;color:#64748b">hours</span>
+                    <button class="cc-btn sm" onclick="ccSaveSlaThreshold()">Save</button>
+                </div>
+                <div style="font-size:11px;color:#94a3b8;margin-top:8px">Threads with first reply over this threshold count as a breach on the next analysis run.</div>
+            `;
+        }
+    } catch (err) {
+        const slaEl = document.getElementById('ccSlaConfig');
+        if (slaEl) slaEl.innerHTML = `<div style="color:#b91c1c;font-size:13px">Failed to load SLA config: ${err.message}</div>`;
+    }
+    ccLoadSnoozes();
+}
+
+async function ccSaveSlaThreshold() {
+    const input = document.getElementById('ccSlaHoursInput');
+    const hours = parseInt(input.value, 10);
+    if (!hours || hours < 1 || hours > 72) {
+        settingsToast('Enter 1–72 hours', 'error');
+        return;
+    }
+    try {
+        const r = await fetch('/api/settings/command_center_config', {
+            method: 'PUT', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value: { sla_hours: hours } })
+        });
+        if (!r.ok) throw new Error('Save failed');
+        settingsToast('SLA threshold updated to ' + hours + 'h', 'success');
+        ccLoadConfig();
+    } catch (err) {
+        settingsToast('Failed: ' + err.message, 'error');
+    }
+}
+
+async function ccLoadSnoozes() {
+    const listEl = document.getElementById('ccSnoozeList');
+    if (!listEl) return;
+    try {
+        const r = await fetch('/api/command-center/snoozes', { credentials: 'include' });
+        const data = r.ok ? await r.json() : { snoozes: [] };
+        const rows = (data.snoozes || []).filter(s => new Date(s.snoozed_until) > new Date());
+        if (!rows.length) {
+            listEl.innerHTML = '<div style="font-size:13px;color:#94a3b8;padding:8px 0">No active snoozes.</div>';
+            return;
+        }
+        listEl.innerHTML = rows.map(s => {
+            const until = new Date(s.snoozed_until);
+            const untilStr = until.toLocaleString();
+            return `<div class="cc-anomaly" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;background:#f8fafc;border-radius:8px;margin-bottom:6px;border:1px solid #e2e8f0">
+                <div>
+                    <div style="font-weight:600;font-size:13px;color:#0f172a">${escapeHtmlLocal(s.alert_key)}</div>
+                    <div style="font-size:11px;color:#64748b;margin-top:2px">Until ${untilStr}${s.reason ? ' — ' + escapeHtmlLocal(s.reason) : ''}</div>
+                </div>
+                <button class="cc-btn ghost sm" onclick="ccRemoveSnooze('${s.id}')">Unsnooze</button>
+            </div>`;
+        }).join('');
+    } catch (err) {
+        listEl.innerHTML = `<div style="color:#b91c1c;font-size:13px">Failed: ${err.message}</div>`;
+    }
+}
+
+async function ccAddSnoozePrompt() {
+    const key = prompt('Alert key to snooze (e.g. "sla_breaches", "unanswered", "anomalies"):');
+    if (!key) return;
+    const hoursStr = prompt('Snooze for how many hours?', '4');
+    const hours = parseFloat(hoursStr);
+    if (!hours || hours <= 0 || hours > 168) {
+        settingsToast('Enter 0.1–168 hours', 'error');
+        return;
+    }
+    const reason = prompt('Reason (optional):', '') || null;
+    const until = new Date(Date.now() + hours * 3600 * 1000).toISOString();
+    try {
+        const r = await fetch('/api/command-center/snoozes', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ alert_key: key.trim(), snoozed_until: until, reason })
+        });
+        if (!r.ok) throw new Error((await r.json()).error || 'Save failed');
+        settingsToast('Snoozed ' + key + ' for ' + hours + 'h', 'success');
+        ccLoadSnoozes();
+    } catch (err) {
+        settingsToast('Failed: ' + err.message, 'error');
+    }
+}
+
+async function ccRemoveSnooze(id) {
+    if (!confirm('Remove this snooze?')) return;
+    try {
+        const r = await fetch('/api/command-center/snoozes/' + id, { method: 'DELETE', credentials: 'include' });
+        if (!r.ok) throw new Error('Delete failed');
+        settingsToast('Snooze removed', 'success');
+        ccLoadSnoozes();
+    } catch (err) {
+        settingsToast('Failed: ' + err.message, 'error');
+    }
+}
+
+function escapeHtmlLocal(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 </script>
 

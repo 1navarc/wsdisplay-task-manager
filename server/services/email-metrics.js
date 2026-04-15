@@ -61,8 +61,17 @@ async function getFilterConfig() {
     const r = await pool.query(
       `SELECT value FROM app_settings WHERE key = 'email_metrics_config'`
     );
-    if (!r.rows.length) return { ...DEFAULT_FILTERS };
-    return { ...DEFAULT_FILTERS, ...(r.rows[0].value || {}) };
+    let base = r.rows.length ? { ...DEFAULT_FILTERS, ...(r.rows[0].value || {}) } : { ...DEFAULT_FILTERS };
+    // Command Center quick-config SLA override
+    try {
+      const cc = await pool.query(
+        `SELECT value FROM app_settings WHERE key = 'command_center_config'`
+      );
+      if (cc.rows.length && cc.rows[0].value && cc.rows[0].value.sla_hours) {
+        base.first_response_sla_hours = Number(cc.rows[0].value.sla_hours);
+      }
+    } catch {}
+    return base;
   } catch {
     return { ...DEFAULT_FILTERS };
   }
@@ -158,6 +167,132 @@ function stripQuotedText(body) {
   if (!body) return '';
   const cut = body.search(/(^|\n)(On .+wrote:|From:\s.+\n)/);
   return (cut >= 0 ? body.slice(0, cut) : body).trim();
+}
+
+// ---------- Rep identity resolution ----------
+// Hiver writes assignment as Gmail labels like "Hiver-info1/jowie",
+// and status like "Hiver-info1/pending". We use the assignee labels to
+// attribute messages to individual reps even when they all send from a
+// shared mailbox address.
+
+// Status-like sub-labels that should NOT be treated as a rep name.
+const HIVER_STATUS_TOKENS = new Set([
+  'pending', 'open', 'closed', 'resolved', 'reopened',
+  'done', 'todo', 'in-progress', 'inprogress', 'snoozed',
+  'urgent', 'spam', 'archived', 'unassigned',
+]);
+
+/**
+ * Pull the assignee from a message's Gmail labels.
+ * Looks for any label whose name starts with "Hiver" or "Hiver-…/" and
+ * extracts the trailing slug, ignoring known status tokens.
+ * Returns the assignee slug (e.g. "jowie") or null.
+ */
+function repFromHiverLabels(labelIds, labelIdToName) {
+  if (!Array.isArray(labelIds) || !labelIdToName) return null;
+  for (const lid of labelIds) {
+    const name = labelIdToName.get(lid);
+    if (!name) continue;
+    if (!/^hiver/i.test(name)) continue;
+    const idx = name.indexOf('/');
+    if (idx === -1) continue;
+    const tail = name.slice(idx + 1).trim().toLowerCase();
+    if (!tail) continue;
+    if (HIVER_STATUS_TOKENS.has(tail)) continue;
+    // Some Hiver setups produce Hiver-info1/jowie/sub — take leftmost segment.
+    const first = tail.split('/')[0];
+    if (HIVER_STATUS_TOKENS.has(first)) continue;
+    return first;
+  }
+  return null;
+}
+
+/** Display name from "Name <addr@x>" header. Returns lowercase name or ''. */
+function displayNameFromHeader(raw) {
+  if (!raw) return '';
+  const m = raw.match(/^\s*"?([^"<]+?)"?\s*</);
+  return m ? m[1].trim().toLowerCase() : '';
+}
+
+/**
+ * Match a message body against known rep signatures.
+ * `signatures` is an array of {user_id, name, email, signature_norm}
+ * where signature_norm is the stripped/lowercased signature text.
+ * Longest match wins to disambiguate overlapping signatures.
+ */
+function repFromSignature(body, signatures) {
+  if (!body || !signatures || !signatures.length) return null;
+  const tail = body.slice(-1500).toLowerCase().replace(/\s+/g, ' ');
+  let best = null;
+  let bestLen = 0;
+  for (const s of signatures) {
+    if (!s.signature_norm || s.signature_norm.length < 8) continue;
+    if (tail.includes(s.signature_norm) && s.signature_norm.length > bestLen) {
+      best = s;
+      bestLen = s.signature_norm.length;
+    }
+  }
+  return best;
+}
+
+/**
+ * Resolve a single rep message to a stable identifier.
+ * Priority: Hiver label assignee > signature match > display name > address.
+ * Returns { rep_key, rep_name, rep_user_id, source }.
+ */
+function resolveRep(message, ctx) {
+  // 1) Hiver label
+  const hiver = repFromHiverLabels(message.labelIds, ctx && ctx.labelIdToName);
+  if (hiver) {
+    // If Hiver slug matches a known user (case-insensitive name or local-part),
+    // upgrade to user_id.
+    let userMatch = null;
+    if (ctx && ctx.signatures) {
+      userMatch = ctx.signatures.find(s =>
+        (s.name && s.name.toLowerCase() === hiver) ||
+        (s.email && s.email.split('@')[0].toLowerCase() === hiver)
+      ) || null;
+    }
+    return {
+      rep_key: userMatch ? `user:${userMatch.user_id}` : `hiver:${hiver}`,
+      rep_name: userMatch ? userMatch.name : hiver,
+      rep_user_id: userMatch ? userMatch.user_id : null,
+      source: 'hiver_label',
+    };
+  }
+  // 2) Signature match
+  if (message.body && ctx && ctx.signatures && ctx.signatures.length) {
+    const sig = repFromSignature(message.body, ctx.signatures);
+    if (sig) {
+      return {
+        rep_key: `user:${sig.user_id}`,
+        rep_name: sig.name || sig.email,
+        rep_user_id: sig.user_id,
+        source: 'signature',
+      };
+    }
+  }
+  // 3) Display name from From header
+  const dn = displayNameFromHeader(message.fromRaw);
+  if (dn) {
+    let userMatch = null;
+    if (ctx && ctx.signatures) {
+      userMatch = ctx.signatures.find(s => s.name && s.name.toLowerCase() === dn) || null;
+    }
+    return {
+      rep_key: userMatch ? `user:${userMatch.user_id}` : `name:${dn}`,
+      rep_name: userMatch ? userMatch.name : dn,
+      rep_user_id: userMatch ? userMatch.user_id : null,
+      source: 'display_name',
+    };
+  }
+  // 4) Mailbox address fallback
+  return {
+    rep_key: `addr:${message.from || 'unknown'}`,
+    rep_name: message.from || 'unknown',
+    rep_user_id: null,
+    source: 'address',
+  };
 }
 
 // ---------- Business-hours math ----------
@@ -258,6 +393,14 @@ Return ONLY JSON of this shape:
   "summary": "..."
 }`;
 
+// Run a promise with a hard timeout. Rejects with Error('timeout') after ms.
+function withTimeout(promise, ms, label) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`timeout after ${ms}ms${label ? ' (' + label + ')' : ''}`)), ms);
+    Promise.resolve(promise).then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
+  });
+}
+
 async function analyzeThreadContent({ subject, customerBody, enabled }) {
   // If categorization disabled, skip AI call entirely — save cost.
   if (!enabled) {
@@ -279,7 +422,8 @@ Subject: ${subject || '(no subject)'}
 Customer:
 ${(customerBody || '').slice(0, 3000)}`;
 
-  const result = await model.generateContent(prompt);
+  // 45s hard cap so a single hung Gemini call can't freeze the whole run.
+  const result = await withTimeout(model.generateContent(prompt), 45000, 'gemini');
   const text = result.response.text();
   const usage = result.response.usageMetadata || {};
   const input_tokens = usage.promptTokenCount || 0;
@@ -307,7 +451,7 @@ ${(customerBody || '').slice(0, 3000)}`;
  * Parse a Gmail thread and compute response-time metrics and message flow.
  * Returns a shape used for aggregation and flagging.
  */
-function analyzeThreadTimings(thread, filters, mailboxEmail) {
+function analyzeThreadTimings(thread, filters, mailboxEmail, ctx) {
   const mbox = mailboxEmail.toLowerCase();
   const msgs = (thread.messages || []).slice().sort((a, b) => {
     return (parseInt(a.internalDate || '0')) - (parseInt(b.internalDate || '0'));
@@ -317,17 +461,32 @@ function analyzeThreadTimings(thread, filters, mailboxEmail) {
   const subject = headerValue(msgs[0].payload?.headers, 'Subject') || '(no subject)';
   const threadDate = parseInt(msgs[0].internalDate || '0');
 
-  // Classify each message as customer or rep
+  // Classify each message as customer or rep, and (for rep messages)
+  // resolve the human assignee from Hiver labels / signature / display name.
   const parsed = msgs.map(m => {
     const fromRaw = headerValue(m.payload?.headers, 'From');
     const addr = extractEmailAddr(fromRaw);
-    return {
+    const isRep = addr === mbox;
+    const base = {
       id: m.id,
       at: parseInt(m.internalDate || '0'),
       from: addr,
-      isRep: addr === mbox,
+      isRep,
       fromRaw,
+      labelIds: m.labelIds || [],
     };
+    if (isRep && ctx) {
+      // Decode body lazily only for rep messages so signature matching can run.
+      // Quoted text is stripped to avoid matching the customer's own quoted reply.
+      let body = '';
+      try { body = stripQuotedText(decodeBody(m.payload || {})); } catch {}
+      const r = resolveRep({ ...base, body }, ctx);
+      base.rep_key = r.rep_key;
+      base.rep_name = r.rep_name;
+      base.rep_user_id = r.rep_user_id;
+      base.rep_source = r.source;
+    }
+    return base;
   });
 
   // Customer = first non-rep sender's address (main customer on thread)
@@ -353,23 +512,40 @@ function analyzeThreadTimings(thread, filters, mailboxEmail) {
 
   let firstResponseMs = null;
   let firstResponderEmail = null;
+  let firstResponderRep = null; // { rep_key, rep_name, rep_user_id, source }
   if (firstCustomerIdx !== -1 && firstRepIdx !== -1) {
     firstResponseMs = elapsedMs(parsed[firstCustomerIdx].at, parsed[firstRepIdx].at, filters);
     firstResponderEmail = parsed[firstRepIdx].from;
+    if (parsed[firstRepIdx].rep_key) {
+      firstResponderRep = {
+        rep_key: parsed[firstRepIdx].rep_key,
+        rep_name: parsed[firstRepIdx].rep_name,
+        rep_user_id: parsed[firstRepIdx].rep_user_id,
+        source: parsed[firstRepIdx].rep_source,
+      };
+    }
   }
 
-  // Ongoing: every (customer -> rep) transition after the first pair
-  const ongoingByRep = {}; // rep -> [ms,...]
+  // Ongoing: every (customer -> rep) transition after the first pair.
+  // Key by resolved rep_key when available so multiple reps on a shared
+  // mailbox don't get collapsed into one bucket.
+  const ongoingByRep = {}; // rep_key -> { rep_name, rep_user_id, ms_list }
   for (let i = firstRepIdx + 1; i < parsed.length; i++) {
-    // Look back for most recent customer message after the prior rep reply
     if (parsed[i].isRep) {
-      // find nearest prior non-rep message (stop if rep before it)
       let j = i - 1;
       while (j >= 0 && parsed[j].isRep) j--;
       if (j >= 0 && parsed[j].from) {
         const ms = elapsedMs(parsed[j].at, parsed[i].at, filters);
-        if (!ongoingByRep[parsed[i].from]) ongoingByRep[parsed[i].from] = [];
-        ongoingByRep[parsed[i].from].push(ms);
+        const key = parsed[i].rep_key || `addr:${parsed[i].from}`;
+        if (!ongoingByRep[key]) {
+          ongoingByRep[key] = {
+            rep_key: key,
+            rep_name: parsed[i].rep_name || parsed[i].from,
+            rep_user_id: parsed[i].rep_user_id || null,
+            ms_list: [],
+          };
+        }
+        ongoingByRep[key].ms_list.push(ms);
       }
     }
   }
@@ -395,8 +571,10 @@ function analyzeThreadTimings(thread, filters, mailboxEmail) {
     customerDomain,
     firstResponseMs,
     firstResponderEmail,
-    ongoingByRep,                    // per-rep arrays of ms
+    firstResponderRep,               // resolved rep identity for first reply
+    ongoingByRep,                    // rep_key -> { rep_name, rep_user_id, ms_list }
     allRepAddrs: [...new Set(parsed.filter(m => m.isRep && m.from).map(m => m.from))],
+    allRepKeys: [...new Set(parsed.filter(m => m.isRep && m.rep_key).map(m => m.rep_key))],
     messageCount: msgs.length,
     isUnanswered,
     lastMsgAt: lastMsg ? lastMsg.at : null,
@@ -407,41 +585,52 @@ function analyzeThreadTimings(thread, filters, mailboxEmail) {
 // ---------- Aggregation ----------
 
 function aggregateRepStats(threadResults) {
-  // rep -> stats accumulator
+  // Key on resolved rep identity (Hiver assignee / signature / display name)
+  // and fall back to the from-address only when no other info exists.
   const byRep = {};
-  for (const t of threadResults) {
-    if (!t || t.skipped || !t.firstResponderEmail) continue;
-    const r = t.firstResponderEmail;
-    if (!byRep[r]) {
-      byRep[r] = {
-        rep_email: r,
+  function bucket(key, name, userId, addr) {
+    if (!byRep[key]) {
+      byRep[key] = {
+        rep_key: key,
+        rep_name: name,
+        rep_user_id: userId || null,
+        rep_email: addr || '',
         threads_first_responder: 0,
         first_response_ms_list: [],
         ongoing_ms_list: [],
         threads_touched: new Set(),
       };
     }
-    byRep[r].threads_first_responder++;
-    if (t.firstResponseMs != null) byRep[r].first_response_ms_list.push(t.firstResponseMs);
-    byRep[r].threads_touched.add(t.gmail_thread_id);
-    // ongoing from each rep
-    for (const [repAddr, msList] of Object.entries(t.ongoingByRep || {})) {
-      if (!byRep[repAddr]) {
-        byRep[repAddr] = {
-          rep_email: repAddr,
-          threads_first_responder: 0,
-          first_response_ms_list: [],
-          ongoing_ms_list: [],
-          threads_touched: new Set(),
-        };
-      }
-      byRep[repAddr].ongoing_ms_list.push(...msList);
-      byRep[repAddr].threads_touched.add(t.gmail_thread_id);
+    return byRep[key];
+  }
+  for (const t of threadResults) {
+    if (!t || t.skipped) continue;
+    if (t.firstResponderEmail || t.firstResponderRep) {
+      const fr = t.firstResponderRep;
+      const key = (fr && fr.rep_key) || `addr:${t.firstResponderEmail}`;
+      const name = (fr && fr.rep_name) || t.firstResponderEmail;
+      const uid  = fr && fr.rep_user_id;
+      const b = bucket(key, name, uid, t.firstResponderEmail);
+      b.threads_first_responder++;
+      if (t.firstResponseMs != null) b.first_response_ms_list.push(t.firstResponseMs);
+      b.threads_touched.add(t.gmail_thread_id);
+    }
+    for (const [repKey, info] of Object.entries(t.ongoingByRep || {})) {
+      // info shape: { rep_key, rep_name, rep_user_id, ms_list }
+      const list = Array.isArray(info) ? info : (info.ms_list || []);
+      const name = Array.isArray(info) ? repKey : (info.rep_name || repKey);
+      const uid  = Array.isArray(info) ? null   : (info.rep_user_id || null);
+      const b = bucket(repKey, name, uid, '');
+      b.ongoing_ms_list.push(...list);
+      b.threads_touched.add(t.gmail_thread_id);
     }
   }
 
   return Object.values(byRep)
     .map(r => ({
+      rep_key: r.rep_key,
+      rep_name: r.rep_name,
+      rep_user_id: r.rep_user_id,
       rep_email: r.rep_email,
       threads_first_responder: r.threads_first_responder,
       threads_touched: r.threads_touched.size,
@@ -454,7 +643,6 @@ function aggregateRepStats(threadResults) {
       ongoing_response_ms_median: median(r.ongoing_ms_list),
     }))
     .sort((a, b) => {
-      // fastest first-response first, then most-responsive, then most threads
       if (a.first_response_ms_avg !== b.first_response_ms_avg) {
         return (a.first_response_ms_avg || Infinity) - (b.first_response_ms_avg || Infinity);
       }
@@ -514,17 +702,138 @@ function buildSummary(threadResults, filters) {
   const answered = ok.filter(t => t.firstResponseMs != null).length;
   const slaMs = (filters.first_response_sla_hours || 4) * 3600 * 1000;
   const slaBreach = firstResponses.filter(ms => ms > slaMs).length;
+  const slaCompliancePct = firstResponses.length
+    ? Math.round(((firstResponses.length - slaBreach) / firstResponses.length) * 100)
+    : null;
   return {
     total_threads: ok.length,
     answered_threads: answered,
     unanswered_threads: unanswered,
     negative_sentiment_count: negative,
     sla_breach_count: slaBreach,
+    sla_compliance_pct: slaCompliancePct,
     sla_hours: filters.first_response_sla_hours,
     overall_first_response_avg_ms: avg(firstResponses),
     overall_first_response_median_ms: median(firstResponses),
     overall_first_response_p90_ms: percentile(firstResponses, 0.9),
   };
+}
+
+// Response-time distribution — histogram of first-response times, great for
+// a CSS-bar chart that works in every email client.
+function aggregateDistribution(threadResults) {
+  const ok = threadResults.filter(t => t && !t.skipped && t.firstResponseMs != null);
+  const buckets = [
+    { key: 'lt_15m',  label: '< 15m',   max: 15 * 60 * 1000, count: 0 },
+    { key: 'lt_1h',   label: '15m–1h',  max: 60 * 60 * 1000, count: 0 },
+    { key: 'lt_4h',   label: '1–4h',    max: 4 * 3600 * 1000, count: 0 },
+    { key: 'lt_24h',  label: '4–24h',   max: 24 * 3600 * 1000, count: 0 },
+    { key: 'gt_24h',  label: '> 24h',   max: Infinity, count: 0 },
+  ];
+  for (const t of ok) {
+    const ms = t.firstResponseMs;
+    for (const b of buckets) {
+      if (ms <= b.max) { b.count++; break; }
+    }
+  }
+  const total = ok.length || 1;
+  return {
+    total_responded: ok.length,
+    buckets: buckets.map(b => ({
+      key: b.key,
+      label: b.label,
+      count: b.count,
+      pct: Math.round((b.count / total) * 100),
+    })),
+  };
+}
+
+// Busy hours — count threads bucketed by hour-of-day of the first message
+// (the customer's email in most cases), plus an after-hours count using the
+// configured business-hours window.
+function aggregateBusyHours(threadResults, filters) {
+  const ok = threadResults.filter(t => t && !t.skipped && t.threadDate);
+  const tz = filters.timezone || 'America/Los_Angeles';
+  const bhStart = filters.business_hours_start || 9;
+  const bhEnd = filters.business_hours_end || 17;
+
+  const hours = Array.from({ length: 24 }, (_, h) => ({ hour: h, count: 0 }));
+  let afterHours = 0;
+  let weekendCount = 0;
+  let peakHour = null;
+  let peakCount = 0;
+
+  for (const t of ok) {
+    // Render the timestamp in the configured timezone to get the local hour/weekday.
+    let localHour, localDow;
+    try {
+      const d = new Date(t.threadDate);
+      const parts = new Intl.DateTimeFormat('en-US', {
+        hour: '2-digit', hour12: false, weekday: 'short', timeZone: tz,
+      }).formatToParts(d);
+      localHour = parseInt(parts.find(p => p.type === 'hour').value, 10);
+      if (localHour === 24) localHour = 0;
+      const dowStr = parts.find(p => p.type === 'weekday').value;
+      const dowMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+      localDow = dowMap[dowStr];
+    } catch {
+      const d = new Date(t.threadDate);
+      localHour = d.getUTCHours();
+      localDow = d.getUTCDay();
+    }
+    hours[localHour].count++;
+    if (localDow === 0 || localDow === 6) weekendCount++;
+    const inBiz = localDow >= 1 && localDow <= 5 && localHour >= bhStart && localHour < bhEnd;
+    if (!inBiz) afterHours++;
+  }
+
+  for (const h of hours) {
+    if (h.count > peakCount) { peakCount = h.count; peakHour = h.hour; }
+  }
+
+  return {
+    hours,                // [{hour:0,count:N},...] — 24 entries in local TZ
+    total: ok.length,
+    peak_hour: peakHour,
+    peak_count: peakCount,
+    after_hours_count: afterHours,
+    weekend_count: weekendCount,
+    business_hours_start: bhStart,
+    business_hours_end: bhEnd,
+    timezone: tz,
+  };
+}
+
+// Find the most recent completed run prior to this one, used for deltas vs
+// the "previous period" in the report.
+async function findPreviousRunSummary(beforeRunId) {
+  try {
+    const cur = await pool.query(
+      `SELECT started_at, mailbox_email, filter_snapshot FROM email_metrics_runs WHERE id = $1`,
+      [beforeRunId]
+    );
+    if (!cur.rows.length) return null;
+    const { started_at, mailbox_email } = cur.rows[0];
+    const prev = await pool.query(
+      `SELECT id, summary, started_at
+         FROM email_metrics_runs
+        WHERE status = 'complete'
+          AND mailbox_email = $2
+          AND started_at < $3
+        ORDER BY started_at DESC
+        LIMIT 1`,
+      [beforeRunId, mailbox_email, started_at]
+    );
+    if (!prev.rows.length) return null;
+    return {
+      run_id: prev.rows[0].id,
+      started_at: prev.rows[0].started_at,
+      summary: prev.rows[0].summary || {},
+    };
+  } catch (e) {
+    console.log('findPreviousRunSummary failed:', e.message);
+    return null;
+  }
 }
 
 // ---------- Flag writer ----------
@@ -673,6 +982,43 @@ async function processRun(runId, filters) {
 
   await updateRunStatus(runId, { current_status_line: `Listing threads (${q})…` });
 
+  // Build rep-resolution context: Gmail label map (Hiver assignee labels)
+  // + saved per-user email signatures. Used by analyzeThreadTimings to
+  // attribute messages to individual reps even on a shared mailbox.
+  const ctx = { labelIdToName: new Map(), signatures: [] };
+  try {
+    const lr = await withTimeout(
+      gmail.users.labels.list({ userId: 'me' }),
+      15000, 'gmail.labels.list'
+    );
+    for (const lbl of (lr.data.labels || [])) {
+      if (lbl.id && lbl.name) ctx.labelIdToName.set(lbl.id, lbl.name);
+    }
+  } catch (e) {
+    console.warn('labels.list failed (rep-from-Hiver disabled):', e.message);
+  }
+  try {
+    const sr = await pool.query(
+      `SELECT id, name, email, email_signature
+         FROM users
+        WHERE email_signature IS NOT NULL AND length(trim(email_signature)) > 0`
+    );
+    ctx.signatures = sr.rows.map(u => ({
+      user_id: u.id,
+      name: (u.name || '').trim(),
+      email: (u.email || '').toLowerCase(),
+      // Normalize: strip HTML, collapse whitespace, lowercase. Then take
+      // the densest 200-char window so noisy footers don't dilute matches.
+      signature_norm: ((u.email_signature || '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase()).slice(0, 200),
+    })).filter(s => s.signature_norm.length >= 8);
+  } catch (e) {
+    console.warn('signatures load failed:', e.message);
+  }
+
   const threadIds = [];
   let pageToken;
   while (threadIds.length < filters.max_threads) {
@@ -700,7 +1046,18 @@ async function processRun(runId, filters) {
 
   for (let i = 0; i < threadIds.length; i++) {
     const state = activeRuns.get(runId);
-    if (!state || state.cancel) {
+    // Also honor a DB-level cancel (set by the Cancel button) — important
+    // because an in-memory cancel can miss if the loop was stuck in a hung
+    // network call and the in-memory state got cleared elsewhere.
+    let dbCancel = false;
+    try {
+      const cr = await pool.query(
+        `SELECT cancel_requested FROM email_metrics_runs WHERE id = $1`,
+        [runId]
+      );
+      dbCancel = !!(cr.rows[0] && cr.rows[0].cancel_requested);
+    } catch {}
+    if (!state || state.cancel || dbCancel) {
       await pool.query(
         `UPDATE email_metrics_runs
             SET status='cancelled', completed_at=NOW(), current_status_line=$2
@@ -717,8 +1074,12 @@ async function processRun(runId, filters) {
     });
 
     try {
-      const thread = (await gmail.users.threads.get({ userId: 'me', id: tid, format: 'full' })).data;
-      const t = analyzeThreadTimings(thread, filters, mailboxEmail);
+      // 30s hard cap on Gmail fetch so a hung API call can't stall the whole run.
+      const thread = (await withTimeout(
+        gmail.users.threads.get({ userId: 'me', id: tid, format: 'full' }),
+        30000, 'gmail.threads.get'
+      )).data;
+      const t = analyzeThreadTimings(thread, filters, mailboxEmail, ctx);
       if (!t) {
         skipped++;
         continue;
@@ -765,7 +1126,15 @@ async function processRun(runId, filters) {
       }
     } catch (err) {
       errors++;
-      console.error(`Metrics thread ${tid} error:`, err.message);
+      const isTimeout = err && /timeout/i.test(err.message || '');
+      console.error(`Metrics thread ${tid} ${isTimeout ? 'TIMEOUT' : 'error'}:`, err.message);
+      // Persist the error tick so the UI reflects that we're moving past this thread.
+      try {
+        await pool.query(
+          `UPDATE email_metrics_runs SET error_count = $2 WHERE id = $1`,
+          [runId, errors]
+        );
+      } catch {}
     }
   }
 
@@ -774,6 +1143,27 @@ async function processRun(runId, filters) {
   const repStats = aggregateRepStats(results);
   const categoryStats = aggregateCategoryStats(results);
   const summary = buildSummary(results, filters);
+  // New visual-friendly aggregates for the report template
+  summary.response_distribution = aggregateDistribution(results);
+  summary.busy_hours = aggregateBusyHours(results, filters);
+  // Previous-run deltas (non-fatal)
+  try {
+    const prev = await findPreviousRunSummary(runId);
+    if (prev && prev.summary) {
+      summary.previous_period = {
+        run_id: prev.run_id,
+        started_at: prev.started_at,
+        total_threads: prev.summary.total_threads,
+        answered_threads: prev.summary.answered_threads,
+        unanswered_threads: prev.summary.unanswered_threads,
+        negative_sentiment_count: prev.summary.negative_sentiment_count,
+        sla_breach_count: prev.summary.sla_breach_count,
+        sla_compliance_pct: prev.summary.sla_compliance_pct,
+        overall_first_response_avg_ms: prev.summary.overall_first_response_avg_ms,
+        overall_first_response_median_ms: prev.summary.overall_first_response_median_ms,
+      };
+    }
+  } catch (e) { /* non-fatal */ }
 
   // Flags
   await updateRunStatus(runId, { current_status_line: 'Computing flags…' });
@@ -789,6 +1179,17 @@ async function processRun(runId, filters) {
     flagCount++;
   }
 
+  // Decorate rep stats with display names from the rep roster (if any).
+  // Graceful degradation: if the roster table doesn't exist yet on first boot
+  // before migration 020 runs, we just store emails.
+  let decoratedRepStats = repStats;
+  try {
+    const repRoster = require('./rep-roster');
+    decoratedRepStats = await repRoster.decorateRepStats(repStats);
+  } catch (err) {
+    console.log('Rep roster not available for decoration:', err.message);
+  }
+
   await pool.query(
     `UPDATE email_metrics_runs
         SET status='complete', completed_at=NOW(),
@@ -801,11 +1202,22 @@ async function processRun(runId, filters) {
     [
       runId, processed, skipped, errors, flagCount,
       totIn, totOut, totCost,
-      JSON.stringify(repStats), JSON.stringify(categoryStats), JSON.stringify(summary),
+      JSON.stringify(decoratedRepStats), JSON.stringify(categoryStats), JSON.stringify(summary),
       `Done — ${processed} processed, ${flagCount} flags, ${skipped} skipped, ${errors} errors`,
     ]
   );
   activeRuns.delete(runId);
+
+  // Fire real-time alerts for high-severity flags. Non-fatal on error.
+  try {
+    const { fireAlertsForRun } = require('./realtime-alerts');
+    const result = await fireAlertsForRun(runId);
+    if (result && result.sent && result.sent.length) {
+      console.log(`Real-time alerts sent for run ${runId}:`, result.sent.length, 'flags,', result.recipients);
+    }
+  } catch (err) {
+    console.error('Real-time alerts error (non-fatal):', err.message);
+  }
 }
 
 async function updateRunStatus(runId, patch) {
@@ -887,4 +1299,10 @@ module.exports = {
   getRunFlags,
   acknowledgeFlag,
   msToHuman,
+  // Re-exported for the Command Center thread-detail endpoint
+  getGmailClientForMailbox,
+  decodeBody,
+  stripQuotedText,
+  headerValue,
+  extractEmailAddr,
 };

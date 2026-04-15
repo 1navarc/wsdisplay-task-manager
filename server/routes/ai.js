@@ -1055,4 +1055,192 @@ router.post('/metrics/report/send-test', requireAuth, requireRole('manager'), as
   }
 });
 
+// ===== WEEKLY + MONTHLY DIGESTS =====
+
+router.get('/metrics/report/:kind/config', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const { kind } = req.params;
+    if (!['weekly', 'monthly'].includes(kind)) return res.status(400).json({ error: 'invalid kind' });
+    const cfg = await dailyReport.getPeriodicConfig(kind);
+    const lastRow = await pool.query(
+      `SELECT value FROM app_settings WHERE key = $1`,
+      [`${kind}_report_last`]
+    );
+    cfg._last = lastRow.rows[0] ? lastRow.rows[0].value : null;
+    res.json(cfg);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/metrics/report/:kind/config', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const { kind } = req.params;
+    if (!['weekly', 'monthly'].includes(kind)) return res.status(400).json({ error: 'invalid kind' });
+    const saved = await dailyReport.savePeriodicConfig(kind, req.body || {});
+    res.json(saved);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/metrics/report/:kind/send-test', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const { kind } = req.params;
+    if (!['weekly', 'monthly'].includes(kind)) return res.status(400).json({ error: 'invalid kind' });
+    const result = await dailyReport.sendPeriodicReport(kind, { dryRun: true });
+    res.json(result);
+  } catch (err) {
+    console.error('Periodic report test send failed:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Preview report in the browser (uses the latest completed metrics run).
+router.get('/metrics/report/:kind/preview', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const { kind } = req.params;
+    if (!['daily', 'weekly', 'monthly'].includes(kind)) return res.status(400).send('invalid kind');
+    const html = await dailyReport.renderPreviewHtml({ kind });
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (err) {
+    console.error('Report preview failed:', err);
+    res.status(500).send('<pre>' + (err.message || 'Preview failed') + '</pre>');
+  }
+});
+
+// ===== REP ROSTER =====
+const repRoster = require('../services/rep-roster');
+
+router.get('/reps', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const rows = await repRoster.list({ activeOnly: req.query.active === '1' });
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/reps', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const row = await repRoster.upsert(req.body || {});
+    res.json(row);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.put('/reps/:id', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    // Upsert by email — caller must include email in payload
+    const row = await repRoster.upsert(req.body || {});
+    res.json(row);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.delete('/reps/:id', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    await repRoster.deleteById(req.params.id);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ===== REAL-TIME ALERTS =====
+const realtimeAlerts = require('../services/realtime-alerts');
+
+router.get('/alerts/config', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const cfg = await realtimeAlerts.getAlertConfig();
+    res.json(cfg);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/alerts/config', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const saved = await realtimeAlerts.saveAlertConfig(req.body || {});
+    res.json(saved);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.get('/alerts/recent', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const rows = await realtimeAlerts.listRecentAlerts(parseInt(req.query.limit) || 50);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ===== REVIEW QUEUE (Ingested KB gating) =====
+const trainingIngestion = require('../services/training-ingestion');
+
+router.get('/review/config', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const cfg = await trainingIngestion.getReviewConfigPublic();
+    res.json(cfg);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/review/config', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const saved = await trainingIngestion.saveReviewConfig(req.body || {});
+    res.json(saved);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.get('/review/qa', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const rows = await trainingIngestion.listPendingQa(parseInt(req.query.limit) || 200);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/review/facts', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const rows = await trainingIngestion.listPendingFacts(parseInt(req.query.limit) || 200);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/review/qa/:id/decide', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const { decision, edit } = req.body || {};
+    if (!['approved', 'rejected', 'edited'].includes(decision)) {
+      return res.status(400).json({ error: 'invalid decision' });
+    }
+    await trainingIngestion.decideQa(req.params.id, decision, req.session.userId, edit || null);
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.post('/review/facts/:id/decide', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const { decision, edit } = req.body || {};
+    if (!['approved', 'rejected', 'edited'].includes(decision)) {
+      return res.status(400).json({ error: 'invalid decision' });
+    }
+    await trainingIngestion.decideFact(req.params.id, decision, req.session.userId, edit || null);
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+// ===== CONFLICTS =====
+
+router.get('/conflicts', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const rows = await trainingIngestion.listConflicts({
+      status: req.query.status || 'pending',
+      limit: parseInt(req.query.limit) || 100,
+    });
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/conflicts/:id/resolve', requireAuth, requireRole('manager'), async (req, res) => {
+  try {
+    const { resolution, custom_value } = req.body || {};
+    if (!['keep_old', 'keep_new', 'custom', 'dismissed'].includes(resolution)) {
+      return res.status(400).json({ error: 'invalid resolution' });
+    }
+    await trainingIngestion.resolveConflict(
+      req.params.id,
+      resolution,
+      req.session.userId,
+      custom_value || null
+    );
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 module.exports = router;
