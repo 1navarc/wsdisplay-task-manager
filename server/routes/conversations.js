@@ -225,6 +225,30 @@ router.patch('/:id', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// AI Overview: Gemini-generated bullet summary of the thread
+router.get('/:id/ai-overview', requireAuth, async (req, res) => {
+  try {
+    const convResult = await pool.query('SELECT id, subject FROM conversations WHERE id=$1', [req.params.id]);
+    if (convResult.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
+    const msgs = await pool.query(
+      'SELECT from_email, from_name, body_text, body_html, sent_at FROM messages WHERE conversation_id=$1 ORDER BY sent_at ASC LIMIT 30',
+      [req.params.id]
+    );
+    if (msgs.rows.length === 0) {
+      return res.json({ bullets: [], generated_at: new Date().toISOString() });
+    }
+    const ai = require('../services/ai-service');
+    if (typeof ai.summarizeThread !== 'function') {
+      return res.json({ bullets: [], error: 'summarizer unavailable' });
+    }
+    const out = await ai.summarizeThread({ subject: convResult.rows[0].subject, messages: msgs.rows });
+    res.json(out);
+  } catch (err) {
+    console.error('AI overview error:', err.message);
+    res.status(500).json({ error: err.message, bullets: [] });
+  }
+});
+
 router.post('/:id/notes', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(

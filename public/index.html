@@ -1159,12 +1159,13 @@
             padding: 0;
             border-radius: 0;
             border: none;
-            border-bottom: 1px solid #e8eaed;
+            border-bottom: 1px solid #f1f3f4;
             box-shadow: none;
             overflow: hidden;
             max-width: 100%;
             transition: background 0.12s ease, box-shadow 0.2s ease, border-color 0.2s ease, margin 0.2s ease, border-radius 0.2s ease;
         }
+        .message-thread { gap: 2px; padding: 18px 22px 22px; }
         .message-card:not(.msg-expanded):hover {
             background: #f6f8fa;
         }
@@ -1187,22 +1188,22 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 0;
-            font-size: 13px;
+            font-size: 13.5px;
             cursor: pointer;
             user-select: none;
-            padding: 10px 4px;
+            padding: 12px 8px;
         }
 
         .message-card.msg-expanded .message-header {
             margin-bottom: 0;
-            padding: 14px 20px;
+            padding: 18px 24px;
             border-bottom: 1px solid #f3f4f6;
         }
 
         /* Collapsed row inner layout — show snippet inline */
         .message-card .msg-snippet {
             color: #5f6368;
-            font-size: 13px;
+            font-size: 13.5px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -1215,9 +1216,9 @@
 
         /* Avatar sizing shifts with state */
         .message-card .msg-avatar {
-            width: 28px;
-            height: 28px;
-            font-size: 10px;
+            width: 32px;
+            height: 32px;
+            font-size: 11px;
             flex-shrink: 0;
             border-radius: 50%;
             color: #fff;
@@ -1227,9 +1228,12 @@
             font-weight: 700;
         }
         .message-card.msg-expanded .msg-avatar {
-            width: 36px;
-            height: 36px;
-            font-size: 13px;
+            width: 40px;
+            height: 40px;
+            font-size: 14px;
+        }
+        .message-card.msg-expanded .message-from {
+            font-size: 15px;
         }
 
         .message-card .message-date {
@@ -1275,8 +1279,126 @@
 
         .message-body-wrapper.msg-body-expanded {
             max-height: none;
-            padding: 16px 20px;
+            padding: 22px 28px 24px;
         }
+        .message-card .message-body {
+            font-size: 14.5px;
+            line-height: 1.75;
+            color: #202124;
+        }
+        body.dark-mode .message-card .message-body { color: #e8eaed; }
+
+        /* AI Overview panel (Gmail Gemini-style) */
+        .ai-overview-panel {
+            margin: 14px 20px 4px;
+            padding: 14px 18px;
+            background: linear-gradient(135deg, #f5f3ff 0%, #faf5ff 100%);
+            border: 1px solid #e9d5ff;
+            border-radius: 14px;
+            position: relative;
+        }
+        body.dark-mode .ai-overview-panel {
+            background: linear-gradient(135deg, #2a1f4d 0%, #1f1734 100%);
+            border-color: #4c2a8a;
+        }
+        .ai-overview-head {
+            display: flex; align-items: center; gap: 8px;
+            margin-bottom: 8px;
+        }
+        .ai-overview-head .ai-icon {
+            width: 22px; height: 22px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, #7c3aed, #6366f1);
+            color: #fff; font-size: 12px; font-weight: 700;
+        }
+        .ai-overview-head .ai-title {
+            font-size: 13px; font-weight: 700; color: #6d28d9;
+            letter-spacing: 0.2px;
+        }
+        body.dark-mode .ai-overview-head .ai-title { color: #c4b5fd; }
+        .ai-overview-head .ai-spacer { flex: 1; }
+        .ai-overview-head .ai-feedback {
+            display: flex; gap: 4px;
+        }
+        .ai-overview-head .ai-feedback button {
+            background: none; border: none; cursor: pointer;
+            font-size: 13px; color: #9ca3af; padding: 2px 4px;
+            border-radius: 4px;
+        }
+        .ai-overview-head .ai-feedback button:hover { background: rgba(124,58,237,0.1); color: #7c3aed; }
+        .ai-overview-bullets {
+            margin: 0; padding-left: 18px;
+            color: #1f2937; font-size: 13.5px; line-height: 1.55;
+        }
+        body.dark-mode .ai-overview-bullets { color: #e2e8f0; }
+        .ai-overview-bullets li { margin-bottom: 4px; }
+        .ai-overview-bullets li:last-child { margin-bottom: 0; }
+        .ai-overview-disclaimer {
+            margin-top: 8px;
+            font-size: 11px; color: #9ca3af;
+            font-style: italic;
+        }
+        .ai-overview-loading {
+            display: flex; align-items: center; gap: 8px;
+            color: #6d28d9; font-size: 12.5px; font-weight: 500;
+        }
+        .ai-overview-loading .ai-spinner {
+            width: 12px; height: 12px;
+            border: 2px solid #e9d5ff; border-top-color: #7c3aed;
+            border-radius: 50%;
+            animation: ai-spin 0.7s linear infinite;
+        }
+        @keyframes ai-spin { to { transform: rotate(360deg); } }
+
+        /* Gmail-style Reply/Forward button row (replaces always-on textarea) */
+        .reply-actions-row {
+            display: flex; flex-wrap: wrap; gap: 8px;
+            padding: 14px 20px 18px;
+            background: transparent;
+        }
+        .reply-action-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 18px;
+            background: #fff;
+            border: 1px solid #d1d5db;
+            border-radius: 22px;
+            font-size: 13.5px; font-weight: 500;
+            color: #1f2937;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+        }
+        .reply-action-btn:hover {
+            background: #f8f9fa;
+            border-color: #9aa0a6;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .reply-action-btn svg { color: #5f6368; }
+        .reply-action-btn.primary {
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            color: #fff; border-color: transparent;
+        }
+        .reply-action-btn.primary:hover {
+            background: linear-gradient(135deg, #4f46e5, #4338ca);
+            color: #fff;
+        }
+        .reply-action-btn.primary svg { color: #fff; }
+        .reply-action-btn.ai {
+            background: linear-gradient(135deg, #7c3aed, #6d28d9);
+            color: #fff; border-color: transparent;
+        }
+        .reply-action-btn.ai:hover {
+            background: linear-gradient(135deg, #6d28d9, #5b21b6);
+            color: #fff;
+        }
+        .reply-action-btn.ai svg { color: #fff; }
+        body.dark-mode .reply-action-btn {
+            background: #1e293b; color: #e2e8f0; border-color: #334155;
+        }
+        body.dark-mode .reply-action-btn:hover {
+            background: #334155; border-color: #64748b;
+        }
+        body.dark-mode .reply-action-btn svg { color: #94a3b8; }
 
         /* "View full" pop-out button on each message header */
         .msg-popout-btn {
@@ -5819,6 +5941,22 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
                         </div>
                     </div>
 
+                    <!-- Gemini AI Overview panel -->
+                    <div id="aiOverviewPanel" class="ai-overview-panel" style="display:none;">
+                        <div class="ai-overview-head">
+                            <div class="ai-icon">G</div>
+                            <div class="ai-title">AI Overview</div>
+                            <div class="ai-spacer"></div>
+                            <div class="ai-feedback">
+                                <button title="Helpful" onclick="aiOverviewFeedback('${conv.id}', true, this)">👍</button>
+                                <button title="Not helpful" onclick="aiOverviewFeedback('${conv.id}', false, this)">👎</button>
+                                <button title="Refresh" onclick="loadAiOverview('${conv.id}', true)">↻</button>
+                            </div>
+                        </div>
+                        <div id="aiOverviewBody"></div>
+                        <div class="ai-overview-disclaimer">By Gemini; this is a summary and may have mistakes.</div>
+                    </div>
+
                     <div class="message-thread" id="messageThread">
                         ${messagesHtml}
                         ${notesHtml}
@@ -5826,20 +5964,37 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
 
                     <div id="aiDraftSection"></div>
 
-                    <div id="kbSearchSection" style="margin:0 16px 8px;">
-                        <div style="display:flex;gap:6px;align-items:center;">
-                            <input type="text" id="kbSearchInput" placeholder="Search knowledge base... (products, specs, policies)" style="flex:1;padding:8px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;" onkeydown="if(event.key==='Enter'){searchKB();}">
-                            <button onclick="searchKB()" style="padding:8px 14px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;white-space:nowrap;">🔍 Search KB</button>
-                        </div>
-                        <div id="kbSearchResults" style="display:none;margin-top:8px;max-height:300px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;background:#fff;"></div>
+                    <!-- Gmail-style action button row -->
+                    <div class="reply-actions-row" id="replyActionsRow">
+                        <button class="reply-action-btn primary" onclick="openReplyComposer('${conv.id}', 'reply')">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
+                            Reply
+                        </button>
+                        <button class="reply-action-btn" onclick="openForwardModal('${conv.id}')">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 014-4h12"/></svg>
+                            Forward
+                        </button>
+                        <button class="reply-action-btn" onclick="openReplyComposer('${conv.id}', 'note')">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            Note
+                        </button>
+                        <button class="reply-action-btn" onclick="createTaskFromEmail('${conv.id}', '${(conv.subject||'').replace(/'/g,"\\'")}', '${(conv.from_email||'').replace(/'/g,"\\'")}', '${(conv.from_name||'').replace(/'/g,"\\'")}')">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                            Task
+                        </button>
+                        <button class="reply-action-btn ai" id="aiDraftBtn" onclick="triggerAiProcess('${conv.id}', this)">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                            AI Draft
+                        </button>
                     </div>
 
-                    <div class="reply-area">
+                    <!-- Composer panel (hidden until Reply/Note clicked) -->
+                    <div class="reply-area" id="replyArea" style="display:none;">
                         <div class="reply-card">
                             <div class="reply-header">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
-                                <span>Reply to ${escapeHtml(conv.from_name || conv.from_email || 'sender')}</span>
-                                <div style="margin-left:auto;">
+                                <span id="replyHeaderLabel">Reply to ${escapeHtml(conv.from_name || conv.from_email || 'sender')}</span>
+                                <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
                                     <div class="templates-wrapper">
                                         <button class="templates-btn" onclick="toggleTemplatesDropdown(event)">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
@@ -5855,30 +6010,19 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
                                             </div>
                                         </div>
                                     </div>
+                                    <button onclick="closeReplyComposer()" style="background:none;border:none;cursor:pointer;color:#9ca3af;font-size:18px;padding:2px 8px;border-radius:4px;" title="Close">×</button>
                                 </div>
                             </div>
                             <textarea class="reply-textarea" id="replyText" placeholder="Type your reply..."></textarea>
                             <div class="reply-actions">
                                 <div class="reply-actions-left">
-                                    <button class="btn btn-secondary" onclick="addInternalNote('${conv.id}')" style="font-size:12px;padding:6px 12px;">
+                                    <button class="btn btn-secondary" id="composerNoteBtn" onclick="addInternalNote('${conv.id}')" style="font-size:12px;padding:6px 12px;display:none;">
                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:4px;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                                        Note
-                                    </button>
-                                    <button class="btn btn-secondary" onclick="openForwardModal('${conv.id}')" style="font-size:12px;padding:6px 12px;">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:4px;"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 014-4h12"/></svg>
-                                        Forward
-                                    </button>
-                                    <button class="btn btn-secondary" onclick="createTaskFromEmail('${conv.id}', '${(conv.subject||'').replace(/'/g,"\\'")}', '${(conv.from_email||'').replace(/'/g,"\\'")}', '${(conv.from_name||'').replace(/'/g,"\\'")}') " style="font-size:12px;padding:6px 12px;">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:4px;"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-                                        Task
-                                    </button>
-                                    <button class="btn btn-secondary" id="aiDraftBtn" onclick="triggerAiProcess('${conv.id}', this)" style="font-size:12px;padding:6px 12px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:4px;"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-                                        AI Draft
+                                        Save Note
                                     </button>
                                 </div>
                                 <div class="reply-actions-right">
-                                    <button class="btn btn-primary" onclick="sendReply('${conv.id}')" style="padding:8px 20px;">
+                                    <button class="btn btn-primary" id="composerSendBtn" onclick="sendReply('${conv.id}')" style="padding:8px 20px;">
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:4px;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                                         Send
                                     </button>
@@ -5888,6 +6032,9 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
                     </div>
                 </div>
             `;
+
+            // Kick off AI Overview load (async, non-blocking)
+            loadAiOverview(conv.id);
 
             // Details panel (far right)
             const assigneeId = conv.assignee_id || '';
@@ -6281,6 +6428,7 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
                 if (latestDraft && latestDraft.content && textarea && !textarea.value.trim()) {
                     // Hide the paragraph editor cards — draft is in the editor
                     section.innerHTML = '';
+                    ensureComposerOpen();
                     // Strip HTML tags for the textarea
                     const tmp = document.createElement('div');
                     tmp.innerHTML = latestDraft.content;
@@ -6516,6 +6664,8 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
         async function triggerAiProcess(conversationId, btn) {
             if (aiProcessing) return;
             aiProcessing = true;
+            // Open the composer so the user can see the spinner / draft come in
+            ensureComposerOpen();
 
             // Update button visually
             function updateBtn(html, disabled) {
@@ -6662,6 +6812,99 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
             }
         }
 
+        // ===== AI OVERVIEW (Gemini thread summary) =====
+        const _aiOverviewCache = {};
+        async function loadAiOverview(convId, force) {
+            const panel = document.getElementById('aiOverviewPanel');
+            const body = document.getElementById('aiOverviewBody');
+            if (!panel || !body) return;
+            panel.style.display = 'block';
+            body.innerHTML = '<div class="ai-overview-loading"><span class="ai-spinner"></span> Summarizing thread…</div>';
+
+            if (!force && _aiOverviewCache[convId]) {
+                renderAiOverview(_aiOverviewCache[convId]);
+                return;
+            }
+            try {
+                const res = await fetch('/api/conversations/' + convId + '/ai-overview', { credentials: 'include' });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+                _aiOverviewCache[convId] = data;
+                renderAiOverview(data);
+            } catch (err) {
+                if (body) body.innerHTML = '<div style="font-size:12.5px;color:#9ca3af;">Could not load AI overview.</div>';
+            }
+        }
+        function renderAiOverview(data) {
+            const body = document.getElementById('aiOverviewBody');
+            if (!body) return;
+            const bullets = (data && Array.isArray(data.bullets)) ? data.bullets : [];
+            if (bullets.length === 0) {
+                body.innerHTML = '<div style="font-size:12.5px;color:#9ca3af;">No summary available yet for this thread.</div>';
+                return;
+            }
+            body.innerHTML = '<ul class="ai-overview-bullets">' +
+                bullets.map(b => '<li>' + escapeHtml(b) + '</li>').join('') +
+                '</ul>';
+        }
+        function aiOverviewFeedback(convId, helpful, btn) {
+            // Best-effort feedback — backend optional
+            try {
+                fetch('/api/feedback/ai-overview', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    credentials: 'include',
+                    body: JSON.stringify({ conversation_id: convId, helpful: !!helpful })
+                }).catch(()=>{});
+            } catch(_) {}
+            if (btn) {
+                btn.style.color = helpful ? '#16a34a' : '#dc2626';
+                btn.disabled = true;
+            }
+        }
+
+        // ===== Composer toggle (Gmail-style) =====
+        function openReplyComposer(convId, mode) {
+            const area = document.getElementById('replyArea');
+            const row = document.getElementById('replyActionsRow');
+            const label = document.getElementById('replyHeaderLabel');
+            const sendBtn = document.getElementById('composerSendBtn');
+            const noteBtn = document.getElementById('composerNoteBtn');
+            const textarea = document.getElementById('replyText');
+            if (!area) return;
+            area.style.display = 'block';
+            if (row) row.style.display = 'none';
+            if (mode === 'note') {
+                if (label) label.textContent = 'Internal Note (only your team can see)';
+                if (sendBtn) sendBtn.style.display = 'none';
+                if (noteBtn) noteBtn.style.display = 'inline-flex';
+                if (textarea) textarea.placeholder = 'Type internal note...';
+            } else {
+                if (label) {
+                    const conv = window._currentConvData || {};
+                    label.textContent = 'Reply to ' + (conv.from_name || conv.from_email || 'sender');
+                }
+                if (sendBtn) sendBtn.style.display = 'inline-flex';
+                if (noteBtn) noteBtn.style.display = 'none';
+                if (textarea) textarea.placeholder = 'Type your reply...';
+            }
+            setTimeout(() => { if (textarea) textarea.focus(); }, 50);
+        }
+        function closeReplyComposer() {
+            const area = document.getElementById('replyArea');
+            const row = document.getElementById('replyActionsRow');
+            if (area) area.style.display = 'none';
+            if (row) row.style.display = 'flex';
+        }
+        // Ensure the composer panel is visible (used when something programmatically
+        // populates the reply textarea — e.g. AI draft, KB insert, template select).
+        function ensureComposerOpen() {
+            const area = document.getElementById('replyArea');
+            const row = document.getElementById('replyActionsRow');
+            if (area && area.style.display === 'none') area.style.display = 'block';
+            if (row && row.style.display !== 'none') row.style.display = 'none';
+        }
+
         // ===== KB SEARCH FUNCTIONS =====
         async function searchKB() {
             const input = document.getElementById('kbSearchInput');
@@ -6682,6 +6925,7 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
                     return;
                 }
 
+                const inConversation = !!document.getElementById('replyText');
                 resultsDiv.innerHTML = results.map(r => `
                     <div style="padding:10px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;" onclick="this.querySelector('.kb-detail').style.display = this.querySelector('.kb-detail').style.display === 'none' ? 'block' : 'none'">
                         <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -6690,7 +6934,7 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
                         </div>
                         <div class="kb-detail" style="display:none;margin-top:8px;">
                             <pre style="font-size:11px;color:#4b5563;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;background:#f9fafb;padding:8px;border-radius:6px;margin:0;">${escapeHtml(r.content.substring(0, 2000))}${r.content.length > 2000 ? '...' : ''}</pre>
-                            <button onclick="event.stopPropagation(); insertKBToReply(this)" data-content="${escapeHtml(r.content.substring(0, 3000))}" style="margin-top:6px;padding:4px 10px;background:#7c3aed;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;">Copy to Reply</button>
+                            ${inConversation ? `<button onclick="event.stopPropagation(); insertKBToReply(this)" data-content="${escapeHtml(r.content.substring(0, 3000))}" style="margin-top:6px;padding:4px 10px;background:#7c3aed;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;">Copy to Reply</button>` : ''}
                         </div>
                     </div>
                 `).join('');
@@ -6703,6 +6947,7 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
             const content = btn.getAttribute('data-content');
             const textarea = document.getElementById('replyText');
             if (textarea && content) {
+                ensureComposerOpen();
                 textarea.value += (textarea.value ? '\n\n' : '') + content;
                 textarea.focus();
                 textarea.scrollTop = textarea.scrollHeight;
@@ -13274,6 +13519,19 @@ async function loadKnowledgeBasePage() {
         container.innerHTML = `
             ${renderSectionTopBar('Knowledge Base')}
             <div style="padding:24px 32px;max-width:1000px;margin:0 auto;">
+                <!-- Search the knowledge base -->
+                <div style="background:#fff;border-radius:14px;border:1px solid #e5e7eb;padding:18px 20px;margin-bottom:20px;">
+                    <div style="font-size:14px;font-weight:700;color:#111827;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        Search Knowledge Base
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <input type="text" id="kbSearchInput" placeholder="Search articles, products, specs, policies..." style="flex:1;padding:10px 14px;border:1px solid #e5e7eb;border-radius:10px;font-size:13.5px;" onkeydown="if(event.key==='Enter'){searchKB();}">
+                        <button onclick="searchKB()" style="padding:10px 18px;background:#7c3aed;color:#fff;border:none;border-radius:10px;font-size:13px;cursor:pointer;font-weight:600;white-space:nowrap;">Search</button>
+                    </div>
+                    <div id="kbSearchResults" style="display:none;margin-top:12px;max-height:400px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:10px;background:#fff;"></div>
+                </div>
+
                 <div style="display:flex;gap:16px;margin-bottom:24px;">
                     <div style="flex:1;padding:16px 20px;background:#fff;border-radius:12px;border:1px solid #e5e7eb;">
                         <div style="font-size:24px;font-weight:700;color:#111827;">${articleCount}</div>

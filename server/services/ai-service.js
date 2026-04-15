@@ -633,6 +633,47 @@ async function processNewMessage(conversationId, messageId, io) {
   }
 }
 
+/**
+ * Generate a Gmail-style "AI Overview" — 2-4 short bullets summarizing the
+ * thread so the user can grasp what's going on without reading every message.
+ * Returns { bullets: string[], generated_at }.
+ */
+async function summarizeThread({ subject, messages }) {
+  const ai = getGenAI();
+  const model = ai.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    generationConfig: { temperature: 0.2, responseMimeType: 'application/json' }
+  });
+
+  // Build a compact transcript — strip HTML, cap each message, cap total length.
+  const stripHtml = (s) => String(s || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const transcript = (messages || []).slice(-12).map((m, idx) => {
+    const who = m.from_name || m.from_email || 'unknown';
+    const body = stripHtml(m.body_text || m.body_html).slice(0, 1500);
+    return `[#${idx + 1} ${who}]\n${body}`;
+  }).join('\n\n').slice(0, 18000);
+
+  const prompt = `You are summarizing an email thread for a customer service agent.
+Write 2 to 4 SHORT bullet points (under 22 words each) capturing the most important facts: what the customer wants, what was offered, prices/quantities/dates, and the current status / next action needed.
+Use plain past tense or noun phrases. No greetings. No "the customer" filler. Be concrete.
+
+Subject: ${subject || '(no subject)'}
+
+Thread (most recent last):
+${transcript}
+
+Return JSON: { "bullets": ["...", "..."] }`;
+
+  const result = await model.generateContent(prompt);
+  const text = result.response.text();
+  let parsed;
+  try { parsed = JSON.parse(text); } catch { parsed = { bullets: [] }; }
+  const bullets = Array.isArray(parsed.bullets)
+    ? parsed.bullets.map(b => String(b).trim()).filter(Boolean).slice(0, 4)
+    : [];
+  return { bullets, generated_at: new Date().toISOString() };
+}
+
 module.exports = {
   initVectorSupport,
   embedText,
@@ -640,5 +681,6 @@ module.exports = {
   searchKnowledgeBase,
   generateDraftReply,
   processNewMessage,
+  summarizeThread,
   getGenAI
 };
