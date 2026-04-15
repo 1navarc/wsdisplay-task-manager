@@ -1315,6 +1315,76 @@
             background: linear-gradient(135deg, #2a1f4d 0%, #1f1734 100%);
             border-color: #4c2a8a;
         }
+        /* NetSuite customer panel — sibling of AI Overview */
+        .netsuite-panel {
+            margin: 10px 20px 4px;
+            padding: 14px 18px;
+            background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+            border: 1px solid #bbf7d0;
+            border-radius: 14px;
+            position: relative;
+        }
+        .netsuite-panel.no-match {
+            background: #f9fafb; border-color: #e5e7eb;
+        }
+        .netsuite-panel.error {
+            background: #fef2f2; border-color: #fecaca;
+        }
+        .netsuite-panel .ns-head {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+        }
+        .netsuite-panel .ns-icon {
+            width: 24px; height: 24px; border-radius: 6px;
+            background: linear-gradient(135deg,#0f766e,#059669);
+            color: #fff; font-weight: 800; font-size: 11px;
+            display: flex; align-items: center; justify-content: center;
+            letter-spacing: 0.5px;
+        }
+        .netsuite-panel .ns-title { font-weight: 700; font-size: 13.5px; color: #064e3b; flex: 1; }
+        .netsuite-panel .ns-actions { display: flex; gap: 6px; }
+        .netsuite-panel .ns-actions button {
+            background: #fff; border: 1px solid #d1d5db; border-radius: 6px;
+            padding: 3px 8px; font-size: 11px; cursor: pointer; color: #374151;
+        }
+        .netsuite-panel .ns-actions button:hover { background: #f9fafb; }
+        .netsuite-panel .ns-match-source {
+            font-size: 11px; color: #6b7280; margin-left: 6px; font-weight: 500;
+        }
+        .netsuite-panel .ns-section { margin-top: 10px; }
+        .netsuite-panel .ns-section-title {
+            font-size: 11px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.6px; color: #047857; margin-bottom: 4px;
+        }
+        .netsuite-panel .ns-fields {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px 14px;
+            background: #fff; padding: 10px 12px; border-radius: 8px; border: 1px solid #e5e7eb;
+        }
+        .netsuite-panel .ns-field-label {
+            font-size: 11px; color: #6b7280; font-weight: 600;
+        }
+        .netsuite-panel .ns-field-value {
+            font-size: 13px; color: #111827; font-weight: 500; word-break: break-word;
+        }
+        .netsuite-panel .ns-table {
+            width: 100%; border-collapse: collapse; font-size: 12px;
+            background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;
+        }
+        .netsuite-panel .ns-table th {
+            text-align: left; font-size: 10px; font-weight: 700; color: #6b7280;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            padding: 6px 10px; background: #f9fafb; border-bottom: 1px solid #e5e7eb;
+        }
+        .netsuite-panel .ns-table td {
+            padding: 6px 10px; border-bottom: 1px solid #f3f4f6; color: #111827;
+        }
+        .netsuite-panel .ns-table tr:last-child td { border-bottom: none; }
+        .netsuite-panel .ns-loading {
+            color: #6b7280; font-size: 13px; padding: 6px 0;
+        }
+        .netsuite-panel a.ns-link {
+            color: #047857; font-weight: 600; text-decoration: none; font-size: 12px;
+        }
+        .netsuite-panel a.ns-link:hover { text-decoration: underline; }
         .ai-overview-head {
             display: flex; align-items: center; gap: 8px;
             margin-bottom: 8px;
@@ -6181,6 +6251,9 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
                         <div class="ai-overview-disclaimer">By Gemini; this is a summary and may have mistakes.</div>
                     </div>
 
+                    <!-- NetSuite customer panel -->
+                    <div id="netsuitePanel" class="netsuite-panel" style="display:none;"></div>
+
                     <div class="message-thread" id="messageThread">
                         ${messagesHtml}
                         ${notesHtml}
@@ -6259,6 +6332,8 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
 
             // Kick off AI Overview load (async, non-blocking)
             loadAiOverview(conv.id);
+            // Kick off NetSuite customer load (async, non-blocking)
+            loadNetSuiteForConv(conv);
 
             // Details panel (far right)
             const assigneeId = conv.assignee_id || '';
@@ -7038,6 +7113,169 @@ const originalLoadConversations = typeof loadConversations === 'function' ? load
 
         // ===== AI OVERVIEW (Gemini thread summary) =====
         const _aiOverviewCache = {};
+        // ===== NetSuite customer panel (in conversation view) =====
+        const _netsuiteCache = {};
+        const _netsuiteFieldMappingCache = { mappings: null, fetchedAt: 0 };
+
+        async function fetchNetSuiteFieldMapping() {
+            const now = Date.now();
+            if (_netsuiteFieldMappingCache.mappings && (now - _netsuiteFieldMappingCache.fetchedAt) < 5 * 60 * 1000) {
+                return _netsuiteFieldMappingCache.mappings;
+            }
+            try {
+                const r = await fetch('/api/netsuite/field-mapping', { credentials: 'include' });
+                if (!r.ok) return [];
+                const data = await r.json();
+                _netsuiteFieldMappingCache.mappings = data;
+                _netsuiteFieldMappingCache.fetchedAt = now;
+                return data;
+            } catch (e) { return []; }
+        }
+
+        function nsFormat(value, hint) {
+            if (value === null || value === undefined || value === '') return '—';
+            if (hint === 'currency') {
+                const n = Number(value);
+                if (!isNaN(n)) return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+            }
+            if (hint === 'date') {
+                try { return new Date(value).toLocaleDateString(); } catch (e) {}
+            }
+            return String(value);
+        }
+
+        async function loadNetSuiteForConv(conv, force) {
+            const panel = document.getElementById('netsuitePanel');
+            if (!panel) return;
+            const email = (conv.from_email || '').trim().toLowerCase();
+            if (!email) { panel.style.display = 'none'; return; }
+
+            // Cache (short-lived; the server also caches)
+            if (!force && _netsuiteCache[email]) {
+                renderNetSuitePanel(_netsuiteCache[email], email, conv);
+                return;
+            }
+
+            panel.style.display = 'block';
+            panel.className = 'netsuite-panel';
+            panel.innerHTML = `
+                <div class="ns-head">
+                    <div class="ns-icon">NS</div>
+                    <div class="ns-title">NetSuite</div>
+                </div>
+                <div class="ns-loading">Looking up customer…</div>
+            `;
+            try {
+                const url = `/api/netsuite/customer?email=${encodeURIComponent(email)}${force ? '&refresh=1' : ''}`;
+                const r = await fetch(url, { credentials: 'include' });
+                if (!r.ok) {
+                    const err = await r.json().catch(() => ({}));
+                    panel.className = 'netsuite-panel error';
+                    panel.innerHTML = `
+                        <div class="ns-head"><div class="ns-icon">NS</div><div class="ns-title" style="color:#991b1b">NetSuite error</div></div>
+                        <div style="font-size:12px;color:#991b1b">${escapeHtml(err.error || ('HTTP ' + r.status))}</div>
+                    `;
+                    return;
+                }
+                const data = await r.json();
+                _netsuiteCache[email] = data;
+                renderNetSuitePanel(data, email, conv);
+            } catch (err) {
+                panel.className = 'netsuite-panel error';
+                panel.innerHTML = `
+                    <div class="ns-head"><div class="ns-icon">NS</div><div class="ns-title" style="color:#991b1b">NetSuite</div></div>
+                    <div style="font-size:12px;color:#991b1b">${escapeHtml(err.message || 'Failed to load')}</div>
+                `;
+            }
+        }
+
+        async function renderNetSuitePanel(data, email, conv) {
+            const panel = document.getElementById('netsuitePanel');
+            if (!panel) return;
+
+            // Not enabled — hide entirely
+            if (data.enabled === false) { panel.style.display = 'none'; return; }
+
+            if (!data.matched) {
+                panel.className = 'netsuite-panel no-match';
+                panel.innerHTML = `
+                    <div class="ns-head">
+                        <div class="ns-icon" style="background:#9ca3af">NS</div>
+                        <div class="ns-title" style="color:#374151">NetSuite</div>
+                        <div class="ns-actions">
+                            <button onclick="loadNetSuiteForConv(${JSON.stringify(conv).replace(/"/g,'&quot;')}, true)" title="Re-check">↻</button>
+                        </div>
+                    </div>
+                    <div style="font-size:12.5px;color:#6b7280">No NetSuite customer matches <strong>${escapeHtml(email)}</strong>.</div>
+                `;
+                return;
+            }
+
+            const mappings = await fetchNetSuiteFieldMapping();
+            const customerMap = mappings.filter(m => m.section === 'customer' && m.is_visible).sort((a,b)=>a.display_order-b.display_order);
+            const orderMap = mappings.filter(m => m.section === 'order' && m.is_visible).sort((a,b)=>a.display_order-b.display_order);
+            const invoiceMap = mappings.filter(m => m.section === 'invoice' && m.is_visible).sort((a,b)=>a.display_order-b.display_order);
+
+            const c = data.customer || {};
+            const customerFieldsHtml = customerMap.map(m => {
+                const v = c[m.ns_field];
+                return `
+                    <div>
+                        <div class="ns-field-label">${escapeHtml(m.display_label)}</div>
+                        <div class="ns-field-value">${escapeHtml(nsFormat(v, m.format_hint))}</div>
+                    </div>
+                `;
+            }).join('');
+
+            const ordersHtml = (data.orders && data.orders.length) ? `
+                <table class="ns-table">
+                    <thead>
+                        <tr>${orderMap.map(m => `<th>${escapeHtml(m.display_label)}</th>`).join('')}</tr>
+                    </thead>
+                    <tbody>
+                        ${data.orders.map(o => `
+                            <tr>${orderMap.map(m => `<td>${escapeHtml(nsFormat(o[m.ns_field], m.format_hint))}</td>`).join('')}</tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            ` : `<div style="font-size:12px;color:#6b7280;padding:6px 0">No recent sales orders.</div>`;
+
+            const invoicesHtml = (data.invoices && data.invoices.length) ? `
+                <table class="ns-table">
+                    <thead>
+                        <tr>${invoiceMap.map(m => `<th>${escapeHtml(m.display_label)}</th>`).join('')}</tr>
+                    </thead>
+                    <tbody>
+                        ${data.invoices.map(o => `
+                            <tr>${invoiceMap.map(m => `<td>${escapeHtml(nsFormat(o[m.ns_field], m.format_hint))}</td>`).join('')}</tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            ` : `<div style="font-size:12px;color:#6b7280;padding:6px 0">No open invoices.</div>`;
+
+            const matchSourceLabel = {
+                exact: 'Exact email match',
+                domain: 'Matched by company domain',
+                manual: 'Manually linked',
+            }[data.match_source] || data.match_source || '';
+
+            panel.className = 'netsuite-panel';
+            panel.innerHTML = `
+                <div class="ns-head">
+                    <div class="ns-icon">NS</div>
+                    <div class="ns-title">${escapeHtml(c.companyname || c.entityid || 'NetSuite Customer')}</div>
+                    <div class="ns-match-source">${escapeHtml(matchSourceLabel)}${data._cached ? ' · cached' : ''}</div>
+                    <div class="ns-actions">
+                        ${data.customer_url ? `<a class="ns-link" href="${escapeHtml(data.customer_url)}" target="_blank" rel="noopener">Open in NetSuite ↗</a>` : ''}
+                        <button onclick="loadNetSuiteForConv(${JSON.stringify(conv).replace(/"/g,'&quot;')}, true)" title="Refresh">↻</button>
+                    </div>
+                </div>
+                ${customerFieldsHtml ? `<div class="ns-section"><div class="ns-section-title">Customer</div><div class="ns-fields">${customerFieldsHtml}</div></div>` : ''}
+                ${orderMap.length ? `<div class="ns-section"><div class="ns-section-title">Recent orders</div>${ordersHtml}</div>` : ''}
+                ${invoiceMap.length ? `<div class="ns-section"><div class="ns-section-title">Open invoices</div>${invoicesHtml}</div>` : ''}
+            `;
+        }
+
         async function loadAiOverview(convId, force) {
             const panel = document.getElementById('aiOverviewPanel');
             const body = document.getElementById('aiOverviewBody');
@@ -10091,6 +10329,7 @@ function buildSettingsShell(activeTab) {
         { id: 'sla', label: 'SLA Rules', minRole: 'manager', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' },
         { id: 'signature', label: 'Signature', minRole: 'rep', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>' },
         { id: 'ai', label: 'AI Settings', minRole: 'manager', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>' },
+        { id: 'netsuite', label: 'NetSuite', minRole: 'manager', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 9h18M9 21V9"/></svg>' },
     ];
 
     // Filter tabs based on user role
@@ -10145,6 +10384,7 @@ async function loadSettingsTab(tab) {
             case 'sla': await loadSettingsSLA(content); break;
             case 'signature': await loadSettingsSignature(content); break;
             case 'ai': await loadSettingsAI(content); break;
+            case 'netsuite': await loadSettingsNetSuite(content); break;
         }
     } catch (err) {
         content.innerHTML = `<div class="settings-empty">Error loading: ${escapeHtml(err.message)}</div>`;
@@ -11013,6 +11253,221 @@ async function saveSignature() {
 }
 
 // ===== AI SETTINGS TAB =====
+// ===== NETSUITE TAB =====
+async function loadSettingsNetSuite(content) {
+    let cfg = {};
+    let mappings = [];
+    try {
+        const [cR, mR] = await Promise.all([
+            fetch('/api/netsuite/settings', { credentials: 'include' }),
+            fetch('/api/netsuite/field-mapping', { credentials: 'include' }),
+        ]);
+        if (cR.ok) cfg = await cR.json();
+        if (mR.ok) mappings = await mR.json();
+    } catch (e) {}
+
+    const masked = (isSet) => isSet ? '••••••••••••' : '';
+    const lastTest = cfg.last_test_at ? new Date(cfg.last_test_at).toLocaleString() : 'never';
+    const lastTestColor = cfg.last_test_status === 'ok' ? '#059669' : (cfg.last_test_status === 'error' ? '#dc2626' : '#6b7280');
+
+    content.innerHTML = `
+        <div class="settings-section-title">NetSuite Integration</div>
+        <div class="settings-section-desc">Connect wsmail.ws to NetSuite to surface customer details, recent orders, and open invoices on every conversation. Data is fetched via SuiteQL and cached for ${cfg.cache_ttl_seconds || 300} seconds per email.</div>
+
+        <div class="settings-card">
+            <div class="settings-card-header">
+                <div class="settings-card-title">Connection</div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px">
+                    <input type="checkbox" id="nsEnabled" ${cfg.enabled ? 'checked' : ''}>
+                    <span>Enabled</span>
+                </label>
+            </div>
+            <div class="settings-form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                <div class="settings-form-group">
+                    <label>NetSuite Account ID</label>
+                    <input type="text" id="nsAccountId" placeholder="1030411 or 1030411_SB1" value="${escapeHtml(cfg.account_id || '')}">
+                    <div style="font-size:11px;color:#9ca3af;margin-top:4px">From your NetSuite URL — e.g. <code>1030411.app.netsuite.com</code></div>
+                </div>
+                <div class="settings-form-group">
+                    <label>Match strategy</label>
+                    <select id="nsMatchStrategy">
+                        <option value="exact_then_domain" ${cfg.default_match_strategy === 'exact_then_domain' ? 'selected' : ''}>Exact email → domain fallback</option>
+                        <option value="exact_only" ${cfg.default_match_strategy === 'exact_only' ? 'selected' : ''}>Exact email only</option>
+                    </select>
+                </div>
+            </div>
+            <div class="settings-form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                <div class="settings-form-group">
+                    <label>Consumer Key ${cfg.consumer_key_set ? '<span style="color:#059669;font-size:11px">(saved)</span>' : ''}</label>
+                    <input type="password" id="nsConsumerKey" placeholder="${cfg.consumer_key_set ? '•••••••• leave blank to keep' : 'paste from Integration record'}" autocomplete="off">
+                </div>
+                <div class="settings-form-group">
+                    <label>Consumer Secret ${cfg.consumer_secret_set ? '<span style="color:#059669;font-size:11px">(saved)</span>' : ''}</label>
+                    <input type="password" id="nsConsumerSecret" placeholder="${cfg.consumer_secret_set ? '•••••••• leave blank to keep' : 'paste from Integration record'}" autocomplete="off">
+                </div>
+            </div>
+            <div class="settings-form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                <div class="settings-form-group">
+                    <label>Token ID ${cfg.token_id_set ? '<span style="color:#059669;font-size:11px">(saved)</span>' : ''}</label>
+                    <input type="password" id="nsTokenId" placeholder="${cfg.token_id_set ? '•••••••• leave blank to keep' : 'paste from Access Token'}" autocomplete="off">
+                </div>
+                <div class="settings-form-group">
+                    <label>Token Secret ${cfg.token_secret_set ? '<span style="color:#059669;font-size:11px">(saved)</span>' : ''}</label>
+                    <input type="password" id="nsTokenSecret" placeholder="${cfg.token_secret_set ? '•••••••• leave blank to keep' : 'paste from Access Token'}" autocomplete="off">
+                </div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:12px">
+                <button class="settings-btn settings-btn-primary" onclick="saveNetSuiteSettings()">Save settings</button>
+                <button class="settings-btn" onclick="testNetSuiteConnection()">Test connection</button>
+                <span style="font-size:12px;color:${lastTestColor}">Last test: ${lastTest}${cfg.last_test_message ? ' — ' + escapeHtml(cfg.last_test_message) : ''}</span>
+            </div>
+            <div style="margin-top:14px;padding:12px 14px;background:#f3f4f6;border-radius:8px;font-size:12px;line-height:1.6;color:#4b5563">
+                <strong>Setup steps in NetSuite</strong> (admin only):
+                <ol style="margin:6px 0 0;padding-left:18px">
+                    <li>Setup → Company → Enable Features → SuiteCloud → check <strong>Token-Based Authentication</strong> and <strong>REST Web Services</strong></li>
+                    <li>Setup → Integration → Manage Integrations → New → name "wsmail.ws", State Enabled, check Token-Based Authentication only → Save → <em>Consumer Key & Secret display once</em></li>
+                    <li>Setup → Users/Roles → Access Tokens → New → Application "wsmail.ws", User you, Role Administrator → Save → <em>Token ID & Secret display once</em></li>
+                    <li>Paste the 4 secrets above and click <strong>Save</strong>, then <strong>Test connection</strong></li>
+                </ol>
+            </div>
+        </div>
+
+        <div class="settings-card">
+            <div class="settings-card-header">
+                <div class="settings-card-title">Field Mapping</div>
+                <button class="settings-btn settings-btn-primary" onclick="saveNetSuiteMapping()">Save mapping</button>
+            </div>
+            <div class="settings-section-desc">Pick which NetSuite fields appear in the conversation panel. The <strong>NS field</strong> is the SuiteQL column name; <strong>Display label</strong> is what reps see. Format hints: <code>currency</code>, <code>date</code>, <code>phone</code>, <code>link</code>.</div>
+
+            ${['customer', 'order', 'invoice'].map(section => {
+                const rows = mappings.filter(m => m.section === section);
+                return `
+                <div style="margin-top:14px">
+                    <div style="font-size:13px;font-weight:700;color:#111827;text-transform:capitalize;margin-bottom:6px">${section} fields</div>
+                    <table class="settings-table" style="font-size:12px" id="nsMapTable_${section}">
+                        <thead>
+                            <tr>
+                                <th style="width:28px"></th>
+                                <th>NS field</th>
+                                <th>Display label</th>
+                                <th style="width:80px">Order</th>
+                                <th style="width:90px">Format</th>
+                                <th style="width:30px"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows.map(r => `
+                                <tr data-section="${section}">
+                                    <td><input type="checkbox" class="ns-vis" ${r.is_visible ? 'checked' : ''}></td>
+                                    <td><input type="text" class="ns-field" value="${escapeHtml(r.ns_field)}" style="width:100%;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px"></td>
+                                    <td><input type="text" class="ns-label" value="${escapeHtml(r.display_label)}" style="width:100%;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px"></td>
+                                    <td><input type="number" class="ns-order" value="${r.display_order}" style="width:100%;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px"></td>
+                                    <td><input type="text" class="ns-format" value="${escapeHtml(r.format_hint || '')}" placeholder="—" style="width:100%;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px"></td>
+                                    <td><button onclick="this.closest('tr').remove()" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px">×</button></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    <button class="settings-btn" style="font-size:12px;margin-top:6px" onclick="addNsMappingRow('${section}')">+ Add ${section} field</button>
+                </div>`;
+            }).join('')}
+        </div>
+    `;
+}
+
+function addNsMappingRow(section) {
+    const tbody = document.querySelector(`#nsMapTable_${section} tbody`);
+    if (!tbody) return;
+    const tr = document.createElement('tr');
+    tr.dataset.section = section;
+    tr.innerHTML = `
+        <td><input type="checkbox" class="ns-vis" checked></td>
+        <td><input type="text" class="ns-field" placeholder="ns field name" style="width:100%;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px"></td>
+        <td><input type="text" class="ns-label" placeholder="Display label" style="width:100%;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px"></td>
+        <td><input type="number" class="ns-order" value="100" style="width:100%;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px"></td>
+        <td><input type="text" class="ns-format" placeholder="—" style="width:100%;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px"></td>
+        <td><button onclick="this.closest('tr').remove()" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px">×</button></td>
+    `;
+    tbody.appendChild(tr);
+}
+
+async function saveNetSuiteSettings() {
+    const body = {
+        enabled: document.getElementById('nsEnabled').checked,
+        account_id: document.getElementById('nsAccountId').value.trim(),
+        default_match_strategy: document.getElementById('nsMatchStrategy').value,
+    };
+    // Only include secrets if user typed something (blank = keep existing)
+    const ck = document.getElementById('nsConsumerKey').value;
+    const cs = document.getElementById('nsConsumerSecret').value;
+    const ti = document.getElementById('nsTokenId').value;
+    const ts = document.getElementById('nsTokenSecret').value;
+    if (ck) body.consumer_key = ck;
+    if (cs) body.consumer_secret = cs;
+    if (ti) body.token_id = ti;
+    if (ts) body.token_secret = ts;
+    try {
+        const res = await fetch('/api/netsuite/settings', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
+        settingsToast('NetSuite settings saved', 'success');
+        // Reload to reflect saved/masked state
+        loadSettingsTab('netsuite');
+    } catch (err) {
+        settingsToast('Failed to save: ' + err.message, 'error');
+    }
+}
+
+async function testNetSuiteConnection() {
+    settingsToast('Testing NetSuite connection...', 'success');
+    try {
+        const res = await fetch('/api/netsuite/test', { method: 'POST', credentials: 'include' });
+        const data = await res.json();
+        if (data.ok) {
+            settingsToast('Connection successful!', 'success');
+        } else {
+            settingsToast('Connection failed: ' + (data.error || 'unknown'), 'error');
+        }
+        loadSettingsTab('netsuite');
+    } catch (err) {
+        settingsToast('Test failed: ' + err.message, 'error');
+    }
+}
+
+async function saveNetSuiteMapping() {
+    const mappings = [];
+    document.querySelectorAll('#settingsTabContent tr[data-section]').forEach(tr => {
+        const section = tr.dataset.section;
+        const ns_field = tr.querySelector('.ns-field').value.trim();
+        const display_label = tr.querySelector('.ns-label').value.trim();
+        if (!ns_field || !display_label) return;
+        mappings.push({
+            section,
+            ns_field,
+            display_label,
+            display_order: parseInt(tr.querySelector('.ns-order').value, 10) || 0,
+            is_visible: tr.querySelector('.ns-vis').checked,
+            format_hint: tr.querySelector('.ns-format').value.trim() || null,
+        });
+    });
+    try {
+        const res = await fetch('/api/netsuite/field-mapping', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mappings })
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
+        settingsToast('Field mapping saved', 'success');
+    } catch (err) {
+        settingsToast('Failed to save mapping: ' + err.message, 'error');
+    }
+}
+
 async function loadSettingsAI(content) {
     // Load current AI settings
     let aiSettings = { mode: 'draft', mailboxes: {} };
